@@ -273,6 +273,11 @@ body.viewonly .cathead .catadd{display:none}
 .summary .scard:active{transform:scale(.96)}
 .summary .scard.on{border-color:var(--green-l);background:#f1f8e9}
 .summary .snum{font-size:22px;font-weight:800;color:var(--green-d)}
+.storechips{display:flex;gap:6px;margin:0 4px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.storechips .sc{flex:1 0 auto;white-space:nowrap;background:var(--card);border:1.5px solid var(--line);border-radius:11px;padding:8px 11px;font-size:12.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:5px;justify-content:center}
+.storechips .sc.on{border-color:var(--green-l);background:#f1f8e9;color:var(--green-d)}
+.storechips .sc .n{font-size:11px;opacity:.65}
+:root[data-theme="dark"] .storechips .sc.on{background:#1b3a1e;color:#a5d6a7}
 .summary .slab{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px;text-transform:uppercase;letter-spacing:.4px}
 .linkbtn{color:var(--green);font-weight:700;background:none}
 .setblock{margin:6px 0 20px}
@@ -377,6 +382,7 @@ body.viewonly .vobadge{display:block}
       <img class="pv" id="photoPreview" alt="">
       <div id="photoHint">📷 No photo yet</div>
       <div class="chipbtns">
+        <button class="chip" id="chipIdentify">🪄 Identify (photo)</button>
         <button class="chip" id="chipScanItem">📸 Scan barcode</button>
         <button class="chip" id="chipFindImg">🔎 Find image</button>
         <button class="chip" id="chipPhoto">🖼️ Add photo</button>
@@ -1207,23 +1213,41 @@ function itemThumb(it){
   return itemEmoji(it.name,it.category);
 }
 
-/* ---------- Auto-categorization ---------- */
-// keyword -> category (checked as substring, longest first)
+/* ---------- Auto-categorization (11-category scheme; NEW items only — existing items never moved) ---------- */
+// keyword -> category (first match wins; broad-word overrides listed first)
 const CAT_RULES=[
-  [["chicken","beef","pork","fish ball","shrimp","sardine","egg","chuck","ribs","bacon","sausage","turkey","ham","tofu","salmon","tuna"],"Protein"],
-  [["milk","butter","cheese","yogurt","cream","mozzarella","condensed","evaporated"],"Dairy/Non-Dairy"],
-  [["flour","sugar","baking","cornstarch","starch","cinnamon","honey","icing","yeast","cocoa","vanilla","molasses","semolina","coffee","mccafe","peanut butter powder"],"Baking"],
-  [["paprika","cayenne","cumin","curry powder","chili powder","garlic powder","onion powder","italian seasoning","lemon pepper","basil","oregano","thyme","pepper flakes","chili pepper"],"Seasonings"],
-  [["bay leaf","cube","coriander","kelp","fennel","sage","star anise","tarragon","turmeric","cardamon","cardamom","clove","ginger","cinnamon stick"],"Cooking Spices"],
-  [["oil","vinegar","soy sauce","fish sauce","oyster sauce","cooking wine","sake","mirin","sriracha","hot sauce","worcestershire","liquid smoke","sesame","shaoxing","koji","liquid seasoning","cooking spray","sweet soy"],"Sauces/Oils"],
-  [["mustard","ketchup","mayonnaise","pickle","peperoncini","curry paste","sundried","bbq"],"Condiments"],
-  [["tomato paste","tomato sauce","canned","soup","broth","stock"],"Canned/Soup"],
-  [["bok choy","broccoli","carrot","kalabasa","kangkong","water crest","watercress","malunggay","mushroom","sitaw","spinach","bell pepper","lettuce","cabbage","cucumber","eggplant","okra","celery","lemon","lime","banana","apple","mango","grapes","fresh","veggie","vegetable"],"Fruit/Veggies"],
-  [["pasta","noodle","rice","udon","lasagna","oats","mung bean","spaghetti","macaroni","grain","quinoa","tortilla"],"Pasta/Grains/Noodles"],
-  [["frozen"],"Frozen"],
-  [["dried cranberr","raisin","dried fruit"],"Dried"],
-  [["water","juice","soda","tea","c2","cola","drink","beverage"],"Beverages"],
-  [["protein","whey","vitamin","supplement","creatine","collagen"],"Supplements"],
+  // --- overrides: stop broad words (chicken/potato/cream/orange/butter) stealing the match ---
+  [["ice cream","gelato","sorbet","popsicle","frozen yogurt","frozen meal","frozen dinner","frozen pizza","frozen waffle"],"Frozen"],
+  [["cookie","biscuit","cracker","potato chip","tortilla chip","corn chip","kettle chip","crisps","popcorn","pretzel","granola bar","trail mix","jerky"],"Snacks"],
+  [["juice","smoothie"],"Beverages"],
+  [["soup","broth"],"Canned & Jarred"],
+  [["peanut butter powder","peanut butter","almond butter","cashew butter","nut butter","nutella"],"Snacks"],
+  [["condensed milk","evaporated milk"],"Baking"],
+  [["coconut milk"],"Canned & Jarred"],
+  [["bell pepper"],"Fruits & Vegetables"],
+  [["cornstarch","corn starch"],"Baking"],
+  // --- Proteins ---
+  [["chicken","beef","pork","turkey"," ham","bacon","sausage","hotdog","hot dog","steak","ribs","chop","lamb","veal","minced","fish ball","fish","salmon","tuna","tilapia","bangus","shrimp","prawn","crab","squid","sardine","mackerel","anchov","tofu","tempeh","egg","spam","luncheon","pepperoni","salami","bologna"],"Proteins"],
+  // --- Dairy & Refrigerated ---
+  [["milk","cheese","mozzarella","cheddar","parmesan","yogurt","yoghurt","butter","cream","margarine","sour cream","cottage cheese","creamer","kefir","half and half"],"Dairy & Refrigerated"],
+  // --- Baking ---
+  [["flour","sugar","baking powder","baking soda","yeast","vanilla","chocolate chip","cocoa","icing","frosting","cake mix","brown sugar","powdered sugar","cornmeal","shortening","molasses","food coloring","semolina","gelatin","agar"],"Baking"],
+  // --- Spices & Seasonings ---
+  [["salt","black pepper","white pepper","peppercorn","pepper flakes","paprika","cumin","cinnamon","oregano","basil","thyme","rosemary","sage","turmeric","curry powder","chili powder","garlic powder","onion powder","cayenne","nutmeg","clove","cardamom","cardamon","coriander","bay leaf","seasoning","italian seasoning","bouillon","stock cube","star anise","fennel","dried herb","lemon pepper"],"Spices & Seasonings"],
+  // --- Oils, Vinegars & Condiments ---
+  [["olive oil","vegetable oil","canola","sesame oil","cooking oil","oil","vinegar","soy sauce","fish sauce","oyster sauce","hoisin","worcestershire","liquid smoke","ketchup","catsup","mustard","mayo","mayonnaise","sriracha","hot sauce","bbq sauce","barbecue","dressing","relish","gochujang","teriyaki","cooking wine","mirin","sake","shaoxing","maggi","liquid seasoning","sweet soy","tabasco","salsa","pesto","jam","jelly","honey","maple syrup","syrup"],"Oils, Vinegars & Condiments"],
+  // --- Canned & Jarred ---
+  [["canned","beans","chickpea","kidney bean","black bean","garbanzo","tomato paste","tomato sauce","canned tomato","sweet corn","creamed corn","canned corn","peas","jarred","pickle","olives","pasta sauce","spaghetti sauce","refried"],"Canned & Jarred"],
+  // --- Grains & Pasta ---
+  [["rice","pasta","spaghetti","macaroni","noodle","ramen","udon","vermicelli","lasagna","bread","tortilla","oats","oatmeal","cereal","quinoa","couscous","barley","bun","bagel","grain"],"Grains & Pasta"],
+  // --- Fruits & Vegetables ---
+  [["apple","banana","orange","grape","berry","strawberr","blueberr","mango","melon","pineapple","lemon","lime","avocado","tomato","potato","onion","garlic","ginger","carrot","broccoli","cauliflower","spinach","lettuce","cabbage","cucumber","celery","mushroom","zucchini","squash","kalabasa","eggplant","okra","sprout","kangkong","bok choy","raisin","dried fruit","produce","vegetable","fruit"],"Fruits & Vegetables"],
+  // --- Snacks ---
+  [["chip","nuts","almond","cashew","peanut","granola","candy","chocolate","wafer","rice cake"],"Snacks"],
+  // --- Beverages ---
+  [["water","soda","cola","coffee"," tea","milk tea","energy drink","gatorade","lemonade","beer","wine","liquor","kombucha","sparkling","soft drink"],"Beverages"],
+  // --- Supplements ---
+  [["protein powder","whey","creatine","collagen","vitamin","supplement","pre-workout","bcaa"],"Supplements"],
 ];
 // Used only where there's no picker (voice / barcode). Prefers what THIS user has chosen before,
 // then falls back to the original keyword rules.
@@ -1245,6 +1269,10 @@ const FRESH=[
   [["egg noodle","egg noodles"],{fridge:180,freezer:730,pantry:365}],
   [["peanut butter powder","powdered peanut","pb2","pb fit","peanut powder"],{fridge:365,freezer:0,pantry:180}],
   [["peanut butter","almond butter","cashew butter","nut butter"],{fridge:180,freezer:0,pantry:90}],
+  // liquid smoke: shelf-stable; keep OUT of the "apple"(applewood) & produce matches below
+  [["liquid smoke"],{fridge:730,freezer:730,pantry:730}],
+  // gelatin/agar powder: essentially indefinite when dry
+  [["gelatin","gelatine","jello","gulaman","agar agar","agar-agar","unflavored gelatin","unflavoured gelatin"],{fridge:1095,freezer:1095,pantry:1095}],
   // --- Dairy ---
   [["evaporated","condensed milk","sweetened condensed"],{fridge:5,freezer:0,pantry:1}],
   [["coconut milk","coconut cream"],{fridge:6,freezer:30,pantry:1}],
@@ -1293,7 +1321,7 @@ const FRESH=[
   [["mayonnaise","mayo"],{fridge:60,freezer:0,pantry:1}],
   [["bbq sauce","barbecue"],{fridge:120,freezer:0,pantry:30}],
   [["oyster sauce"],{fridge:150,freezer:0,pantry:30}],
-  [["hoisin","sweet soy","kecap"],{fridge:365,freezer:0,pantry:60}],
+  [["hoisin","sweet soy","kecap"],{fridge:270,freezer:180,pantry:60}],
   [["fish sauce"],{fridge:365,freezer:0,pantry:365}],
   [["soy sauce","kikkoman","dark soy","light soy"],{fridge:365,freezer:0,pantry:180}],
   [["sriracha","hot sauce","franks","chili sauce","tabasco"],{fridge:365,freezer:0,pantry:180}],
@@ -1526,6 +1554,7 @@ function freshStatus(item){
 let currentTab="pantry";
 let searchQ="";
 let activeFilter=null; // null | 'low' | 'expiring'
+let storeFilter=null; // null | 'pantry' | 'fridge' | 'freezer'
 
 function itemMatchesSearch(it){
   if(!searchQ) return true;
@@ -1576,6 +1605,9 @@ function renderPantry(){
   let items=state.items.filter(i=>i.location==="pantry" && itemMatchesSearch(i));
   if(activeFilter==="low") items=items.filter(i=>i.percent!=null && i.percent<=25);
   else if(activeFilter==="expiring") items=items.filter(i=>{const f=freshStatus(i);return f&&f.daysLeft<=3;});
+  if(storeFilter==="pantry") items=items.filter(i=>!i.store||i.store==="pantry");
+  else if(storeFilter==="fridge") items=items.filter(i=>i.store==="fridge");
+  else if(storeFilter==="freezer") items=items.filter(i=>i.store==="freezer");
 
   // summary (from full pantry; tap a card to filter)
   const pantryAll=state.items.filter(i=>i.location==="pantry");
@@ -1589,11 +1621,20 @@ function renderPantry(){
       <div class="scard ${activeFilter==='low'?'on':''}" data-filter="low"><div class="snum" style="color:${low?'#e53935':'#2e7d32'}">${low}</div><div class="slab">Running low</div></div>
       <div class="scard ${activeFilter==='expiring'?'on':''}" data-filter="expiring"><div class="snum" style="color:${expiring?'#ef6c00':'#2e7d32'}">${expiring}</div><div class="slab">Expiring</div></div>
     </div>`;
+    const inFridge=pantryAll.filter(i=>i.store==="fridge").length, inFreezer=pantryAll.filter(i=>i.store==="freezer").length, inPantry=total-inFridge-inFreezer;
+    if(inFridge+inFreezer>0 || storeFilter){
+      summary+=`<div class="storechips">`+
+        `<div class="sc ${!storeFilter?'on':''}" data-storefilter="all">All <span class="n">${total}</span></div>`+
+        `<div class="sc ${storeFilter==='pantry'?'on':''}" data-storefilter="pantry">🗄️ Pantry <span class="n">${inPantry}</span></div>`+
+        `<div class="sc ${storeFilter==='fridge'?'on':''}" data-storefilter="fridge">❄️ Fridge <span class="n">${inFridge}</span></div>`+
+        `<div class="sc ${storeFilter==='freezer'?'on':''}" data-storefilter="freezer">🧊 Freezer <span class="n">${inFreezer}</span></div>`+
+      `</div>`;
+    }
   }
 
   // Empty categories the user created — shown (in category view, no search/filter) so they can add into them.
   const emptyCatsHTML=()=>{
-    if(searchQ || activeFilter || state.settings.sort!=="category") return "";
+    if(searchQ || activeFilter || storeFilter || state.settings.sort!=="category") return "";
     let h="";
     for(const cat of CAT_ORDER){
       if(cat==="Other") continue;
@@ -1604,7 +1645,8 @@ function renderPantry(){
   };
 
   if(!items.length){
-    const msg=activeFilter==="low"?"Nothing is running low 🎉":activeFilter==="expiring"?"Nothing is expiring soon 🎉":(searchQ?"No pantry items match your search.":"Your pantry is empty. Tap ＋ to add items — or tap ＋ on a category below.");
+    const storeLbl={pantry:"pantry",fridge:"fridge",freezer:"freezer"}[storeFilter];
+    const msg=activeFilter==="low"?"Nothing is running low 🎉":activeFilter==="expiring"?"Nothing is expiring soon 🎉":storeLbl?("Nothing stored in the "+storeLbl+" yet."):(searchQ?"No pantry items match your search.":"Your pantry is empty. Tap ＋ to add items — or tap ＋ on a category below.");
     host.innerHTML=summary+emptyHTML(searchQ?"🔍":activeFilter?"✅":"🥫", msg)+emptyCatsHTML();
     return;
   }
@@ -1712,6 +1754,8 @@ document.addEventListener("click",e=>{
   if(addc){ if(!requireEdit()) return; presetCat=addc.dataset.addcat; openItemSheet(null); return; }
   const filt=e.target.closest("[data-filter]");
   if(filt){ const f=filt.dataset.filter; activeFilter = (f==="all"||activeFilter===f) ? null : f; renderPantry(); return; }
+  const sfilt=e.target.closest("[data-storefilter]");
+  if(sfilt){ const f=sfilt.dataset.storefilter; storeFilter=(f==="all"||storeFilter===f)?null:f; renderPantry(); return; }
   const openb=e.target.closest("[data-open]");
   if(openb){ markOpened(openb.dataset.open); return; }
   const nb=e.target.closest("[data-newbatch]");
@@ -1876,14 +1920,17 @@ $$("#segStore button").forEach(b=>b.addEventListener("click",()=>setStore(b.data
 $("#fPct").addEventListener("input",updatePct);
 function updatePct(){ const v=$("#fPct").value; $("#fPctVal").textContent=v+"%"; $("#pctLabel").textContent=v+"%"; }
 
-// You choose the category. We only SUGGEST one if you've filed something similar before.
+// You choose the category. We SUGGEST one (your past choice first, else the auto-sort) — never forced; typing never overrides a category you picked.
 $("#fName").addEventListener("input",()=>{
   if(editingId) return; // don't override on edit
   const nm=$("#fName").value.trim();
   if(nm.length<2){ $("#autoCatTag").textContent=""; return; }
-  const pref=preferredCategory(nm);          // learned from your own past choices — no forced auto-detect
-  if(pref && !catTouched){ setCatSelect(pref); $("#autoCatTag").textContent=" · your usual: "+pref; }
-  else $("#autoCatTag").textContent="";
+  if(!catTouched){
+    const pref=preferredCategory(nm);                 // your own past choices win
+    const guess=pref||autoCategory(nm);               // else the 11-category auto-sort (new items only)
+    if(guess && guess!=="Other"){ setCatSelect(guess); $("#autoCatTag").textContent = pref?(" · your usual: "+pref):(" · suggested: "+guess); }
+    else $("#autoCatTag").textContent="";
+  }
   // live duplicate check
   const dup=state.items.find(i=>i.name.toLowerCase()===nm.toLowerCase());
   if(dup){ $("#autoCatTag").textContent=` ⚠️ already in ${dup.location}`; }
@@ -2018,7 +2065,10 @@ let photoMode="photo";
 fileInput.addEventListener("change",()=>{
   const f=fileInput.files[0]; if(!f) return;
   const img=new Image();
-  img.onload=()=>{ pendingPhoto=toThumb(img); showPhoto(pendingPhoto); toast("Photo added","good"); };
+  img.onload=()=>{
+    if(photoMode==="identify"){ identifyPhoto(toThumb(img,720,0.78)); }
+    else { pendingPhoto=toThumb(img); showPhoto(pendingPhoto); toast("Photo added","good"); }
+  };
   img.src=URL.createObjectURL(f);
   fileInput.value="";
 });
@@ -2029,12 +2079,13 @@ const camView=$("#camView"), camVideo=$("#camVideo");
 
 async function openCamera(mode){
   camMode=mode;
-  $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":"PHOTO";
+  const isCapture=(mode==="photo"||mode==="identify");
+  $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":mode==="identify"?"IDENTIFY":"PHOTO";
   $("#camHint").textContent = mode==="barcode"?"Line up the product barcode":
-    mode==="date"?"Scanning for date…":"Tap to capture";
-  $("#camHint").classList.toggle("scanning",mode!=="photo");
-  $("#camScanBox").style.display = mode==="photo"?"none":"block";
-  $("#camScanBox").classList.toggle("scanning",mode!=="photo");
+    mode==="date"?"Scanning for date…":mode==="identify"?"Fill the frame with the item or its label, then tap":"Tap to capture";
+  $("#camHint").classList.toggle("scanning",mode==="date");
+  $("#camScanBox").style.display = isCapture?"none":"block";
+  $("#camScanBox").classList.toggle("scanning",mode==="date");
   try{
     // Ask for a sharp rear-camera feed; fall back to a basic request if the device refuses it
     let want={video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false};
@@ -2091,6 +2142,7 @@ async function startDateScan(){
 $("#camClose").addEventListener("click",closeCamera);
 $("#camCancel2").addEventListener("click",closeCamera);
 
+$("#chipIdentify").addEventListener("click",()=>openCamera("identify"));
 $("#chipScanItem").addEventListener("click",()=>openCamera("barcode"));
 $("#chipFindImg").addEventListener("click",findImageByName);
 $("#chipScanDate").addEventListener("click",()=>openCamera("date"));
@@ -2155,6 +2207,54 @@ function loadZXing(){
 // Barcode -> product lookup. Open Food Facts first (free, no key, strong international
 // coverage); USDA FoodData Central "Branded Foods" as fallback (the US database Cronometer
 // draws from — much better for US store brands like Great Value).
+// ----- Identify an item from a photo: try a barcode in the shot, else read the label text -----
+async function identifyPhoto(dataUrl){
+  pendingPhoto=dataUrl; showPhoto(pendingPhoto);
+  toast("🔎 Identifying…","good");
+  // 1) is there a barcode visible in the shot? (most accurate)
+  try{
+    await loadZXing();
+    zxingReader=zxingReader||new ZXing.BrowserMultiFormatReader();
+    const res=await zxingReader.decodeFromImageUrl(dataUrl);
+    const code=res && (res.getText?res.getText():res.text);
+    if(code){ lookupBarcode(code); return; }
+  }catch(e){ /* no barcode — read the label instead */ }
+  // 2) OCR the label and pull out the most name-like line
+  try{
+    await loadTesseract();
+    let worker=null, text="";
+    try{ worker=await Tesseract.createWorker("eng"); }catch(e){}
+    try{
+      if(worker){ const r=await worker.recognize(dataUrl); text=r.data.text||""; }
+      else { const r=await Tesseract.recognize(dataUrl,"eng"); text=r.data.text||""; }
+    }catch(e){}
+    if(worker){ try{ await worker.terminate(); }catch(e){} }
+    const name=guessNameFromLabel(text);
+    if(name){
+      if(!$("#fName").value.trim()){ $("#fName").value=name; $("#fName").dispatchEvent(new Event("input")); }
+      toast('✓ Read: "'+name+'" — edit if needed',"good");
+    }else{
+      toast("Couldn't read a name — type it (photo saved)","warn");
+    }
+  }catch(e){ toast("Couldn't read the label — type the name (photo saved)","warn"); }
+}
+// Pick the most product-name-like line out of raw label OCR
+function guessNameFromLabel(raw){
+  const noise=/(net\s*wt|net\s*weight|nutrition|ingredient|calorie|serving|\bper\b|best before|\bexp\b|distributed|manufactured|product of|keep refrigerated|refrigerate|www\.|\.com|\.ca|store in|contains|allergen|fl\s*oz|\d+\s*(g|kg|oz|ml|l|lb)\b)/i;
+  const lines=(raw||"").replace(/\r/g," ").split(/\n+/).map(s=>s.replace(/[^A-Za-z0-9&'\- ]+/g," ").replace(/\s+/g," ").trim()).filter(Boolean);
+  let best=null,bestScore=-1;
+  for(const ln of lines){
+    if(noise.test(ln)) continue;
+    const letters=(ln.match(/[A-Za-z]/g)||[]).length;
+    const digits=(ln.match(/\d/g)||[]).length;
+    const words=ln.split(" ").filter(w=>w.length>1);
+    if(letters<3||ln.length>34||words.length<1||words.length>5) continue;
+    let score=letters - digits*2 + (words.length<=3?4:0);
+    if(/^[A-Z0-9 &'\- ]+$/.test(ln)) score+=8;   // all-caps lines are usually the product name
+    if(score>bestScore){ bestScore=score; best=ln; }
+  }
+  return best?titleCase(best.toLowerCase()):null;
+}
 async function lookupBarcode(code){
   toast("🔎 Looking up "+code+"…","good");
   // 1) Open Food Facts
@@ -2234,6 +2334,10 @@ $("#camShutter").addEventListener("click",async()=>{
     const shots=[captureDateRegion(false),captureDateRegion(true)];
     closeCamera();
     await ocrDate(shots);
+  }else if(camMode==="identify"){
+    const shot=toThumb(camVideo,720,0.78);   // higher-res so OCR can read the label
+    closeCamera();
+    await identifyPhoto(shot);
   }else{
     pendingPhoto=toThumb(camVideo,420,0.62); closeCamera(); showPhoto(pendingPhoto); toast("Photo captured","good");
   }
@@ -2243,7 +2347,7 @@ $("#camShutter").addEventListener("click",async()=>{
 // clean labels) and gentle (grayscale + mild contrast, best for slightly blurry stamps).
 function captureDateRegion(soft){
   const v=camVideo, vw=v.videoWidth||1280, vh=v.videoHeight||720;
-  const bx=Math.round(vw*0.06), by=Math.round(vh*0.30), bw=Math.round(vw*0.88), bh=Math.round(vh*0.34);
+  const bx=Math.round(vw*0.11), by=Math.round(vh*0.335), bw=Math.round(vw*0.78), bh=Math.round(vh*0.25);
   const scale=3;
   const c=document.createElement("canvas"); c.width=Math.round(bw*scale); c.height=Math.round(bh*scale);
   const ctx=c.getContext("2d");
