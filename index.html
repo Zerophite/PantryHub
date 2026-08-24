@@ -634,6 +634,17 @@ window.FIREBASE_CONFIG = {
 window.CLOUD = !!(window.FIREBASE_CONFIG.apiKey && !/PASTE/.test(window.FIREBASE_CONFIG.apiKey));
 </script>
 
+<!-- ============================================================
+     AI DATE READER  <-  PASTE YOUR PROXY URL HERE (not your key!)
+     Your Gemini key stays private inside a free Cloudflare Worker; this app only
+     calls the Worker URL. No secret ever lives in this file / your repo.
+     Setup steps: see the chat. Until filled in, dates use the basic offline reader.
+     ============================================================ -->
+<script>
+window.GEMINI_PROXY = "PASTE_YOUR_WORKER_URL_HERE";
+window.GEMINI = !!(window.GEMINI_PROXY && !/PASTE/.test(window.GEMINI_PROXY));
+</script>
+
 <script>
 /* ============================================================
    PANTRY & GROCERY  — single-file app
@@ -2102,7 +2113,7 @@ async function openCamera(mode){
     try{ await camVideo.play(); }catch(e){}
     camView.style.display="flex";
     if(mode==="barcode") startBarcodeScan();
-    if(mode==="date") getOcrWorker().catch(()=>{});   // warm up so the shutter tap reads fast
+    if(mode==="date" && !window.GEMINI) getOcrWorker().catch(()=>{});   // warm offline reader (skip if AI is on)
   }catch(err){
     toast("Camera unavailable — use Add photo instead","warn");
     photoMode=mode; fileInput.click();
@@ -2335,9 +2346,15 @@ function guessCatFromOFF(tags){
 // Shutter: photo capture, and for date -> OCR (grab a crisp + a gentle crop before closing)
 $("#camShutter").addEventListener("click",async()=>{
   if(camMode==="date"){
-    const shots=[captureDateRegion(false),captureDateRegion(true)];
-    closeCamera();
-    await ocrDate(shots);
+    if(window.GEMINI){
+      const shot=captureDateRegionRaw();   // colour crop for the AI
+      closeCamera();
+      await geminiDate(shot);
+    }else{
+      const shots=[captureDateRegion(false),captureDateRegion(true)];
+      closeCamera();
+      await ocrDate(shots);
+    }
   }else{
     pendingPhoto=toThumb(camVideo,420,0.62); closeCamera(); showPhoto(pendingPhoto); toast("Photo captured","good");
   }
@@ -2367,6 +2384,35 @@ function captureDateRegion(soft){
   return c.toDataURL("image/png");
 }
 
+/* ----- AI expiry-date reading via Gemini (used when window.GEMINI is set) ----- */
+// A plain colour crop of the scan box — the AI reads a normal photo better than a thresholded one.
+function captureDateRegionRaw(){
+  const v=camVideo, vw=v.videoWidth||1280, vh=v.videoHeight||720;
+  const bx=Math.round(vw*0.06), by=Math.round(vh*0.28), bw=Math.round(vw*0.88), bh=Math.round(vh*0.34);
+  const c=document.createElement("canvas"); c.width=bw; c.height=bh;
+  c.getContext("2d").drawImage(v, bx,by,bw,bh, 0,0,bw,bh);
+  return c.toDataURL("image/jpeg",0.85);
+}
+async function geminiReadDate(dataUrl){
+  const b64=dataUrl.split(",")[1];
+  const mime=dataUrl.slice(5, dataUrl.indexOf(";"));
+  // Calls YOUR private Cloudflare Worker (window.GEMINI_PROXY) — the key lives there, not here.
+  const r=await fetch(window.GEMINI_PROXY,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({b64:b64,mime:mime,today:todayISO()})});
+  if(!r.ok) throw new Error("proxy "+r.status);
+  const j=await r.json();
+  const m=String((j&&j.date)||"").match(/(\d{4})-(\d{2})-(\d{2})/);
+  return m ? m[0] : null;
+}
+async function geminiDate(dataUrl){
+  toast("🔎 Reading date…","good");
+  try{
+    const iso=await geminiReadDate(dataUrl);
+    if(iso && plausibleExpiry(iso)){ $("#fExp").value=iso; updateFreshInfo(); toast("📅 Read "+iso+" — double-check it's right","good"); }
+    else if(iso){ toast("Read "+iso+" but that looks off — tap the field to pick it","warn"); }
+    else { toast("Couldn't find a date — tap the field to pick it","warn"); }
+  }catch(e){ toast("AI read failed ("+(e&&e.message||"error")+") — tap the field to pick it","warn"); }
+}
 /* ----- OCR expiry date via Tesseract.js (lazy CDN load + a warm, reused worker) ----- */
 let tessLoaded=false;
 function loadTesseract(){
