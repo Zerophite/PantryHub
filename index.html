@@ -1216,36 +1216,42 @@ function itemThumb(it){
 /* ---------- Auto-categorization (11-category scheme; NEW items only — existing items never moved) ---------- */
 // keyword -> category (first match wins; broad-word overrides listed first)
 const CAT_RULES=[
-  // --- overrides: stop broad words (chicken/potato/cream/orange/butter) stealing the match ---
+  // --- overrides: stop broad words (chicken/beef/fish/potato/cream/orange) stealing the match ---
   [["ice cream","gelato","sorbet","popsicle","frozen yogurt","frozen meal","frozen dinner","frozen pizza","frozen waffle"],"Frozen"],
+  [["bouillon","stock cube","beef cube","pork cube","chicken cube","maggi cube","knorr cube"],"Spices & Seasonings"],
+  [["chicken stock","beef stock","vegetable stock","fish stock","chicken broth","beef broth","bone broth"],"Canned & Jarred"],
+  [["fish sauce"],"Oils, Vinegars & Condiments"],
+  [["liquid seasoning","maggi","knorr"],"Oils, Vinegars & Condiments"],
+  [["egg noodle","egg noodles"],"Grains & Pasta"],
   [["cookie","biscuit","cracker","potato chip","tortilla chip","corn chip","kettle chip","crisps","popcorn","pretzel","granola bar","trail mix","jerky"],"Snacks"],
   [["juice","smoothie"],"Beverages"],
+  [["mccafe","ground coffee","instant coffee","espresso","coffee bean"],"Beverages"],
   [["soup","broth"],"Canned & Jarred"],
   [["peanut butter powder","peanut butter","almond butter","cashew butter","nut butter","nutella"],"Snacks"],
   [["condensed milk","evaporated milk"],"Baking"],
   [["coconut milk"],"Canned & Jarred"],
   [["bell pepper"],"Fruits & Vegetables"],
-  [["cornstarch","corn starch"],"Baking"],
+  [["potato starch","corn starch","cornstarch","tapioca starch","potato flour"],"Baking"],
   // --- Proteins ---
-  [["chicken","beef","pork","turkey"," ham","bacon","sausage","hotdog","hot dog","steak","ribs","chop","lamb","veal","minced","fish ball","fish","salmon","tuna","tilapia","bangus","shrimp","prawn","crab","squid","sardine","mackerel","anchov","tofu","tempeh","egg","spam","luncheon","pepperoni","salami","bologna"],"Proteins"],
+  [["chicken","beef","pork","turkey"," ham","bacon","sausage","hotdog","hot dog","steak","ribs","chop","lamb","veal","minced beef","minced pork","minced meat","fish ball","fish","salmon","tuna","tilapia","bangus","shrimp","prawn","crab","squid","sardine","mackerel","anchov","tofu","tempeh","egg","spam","luncheon","pepperoni","salami","bologna"],"Proteins"],
   // --- Dairy & Refrigerated ---
   [["milk","cheese","mozzarella","cheddar","parmesan","yogurt","yoghurt","butter","cream","margarine","sour cream","cottage cheese","creamer","kefir","half and half"],"Dairy & Refrigerated"],
   // --- Baking ---
-  [["flour","sugar","baking powder","baking soda","yeast","vanilla","chocolate chip","cocoa","icing","frosting","cake mix","brown sugar","powdered sugar","cornmeal","shortening","molasses","food coloring","semolina","gelatin","agar"],"Baking"],
+  [["flour","sugar","baking powder","baking soda","yeast","vanilla","chocolate chip","cocoa","icing","frosting","cake mix","brown sugar","powdered sugar","cornmeal","shortening","molasses","food coloring","semolina","gelatin","gelatine","agar"],"Baking"],
   // --- Spices & Seasonings ---
-  [["salt","black pepper","white pepper","peppercorn","pepper flakes","paprika","cumin","cinnamon","oregano","basil","thyme","rosemary","sage","turmeric","curry powder","chili powder","garlic powder","onion powder","cayenne","nutmeg","clove","cardamom","cardamon","coriander","bay leaf","seasoning","italian seasoning","bouillon","stock cube","star anise","fennel","dried herb","lemon pepper"],"Spices & Seasonings"],
+  [["salt","black pepper","white pepper","peppercorn","pepper flakes","paprika","cumin","cinnamon","oregano","basil","thyme","rosemary","sage","turmeric","curry powder","chili powder","chili pepper","garlic powder","onion powder","cayenne","nutmeg","clove","cardamom","cardamon","coriander","bay leaf","seasoning","italian seasoning","star anise","fennel","dried herb","dried kelp","dried basil","dried oregano","dried thyme","tarragon","savoury","sesame seed","lemon pepper"],"Spices & Seasonings"],
   // --- Oils, Vinegars & Condiments ---
-  [["olive oil","vegetable oil","canola","sesame oil","cooking oil","oil","vinegar","soy sauce","fish sauce","oyster sauce","hoisin","worcestershire","liquid smoke","ketchup","catsup","mustard","mayo","mayonnaise","sriracha","hot sauce","bbq sauce","barbecue","dressing","relish","gochujang","teriyaki","cooking wine","mirin","sake","shaoxing","maggi","liquid seasoning","sweet soy","tabasco","salsa","pesto","jam","jelly","honey","maple syrup","syrup"],"Oils, Vinegars & Condiments"],
+  [["olive oil","vegetable oil","canola","sesame oil","cooking oil","cooking spray","oil","vinegar","soy sauce","oyster sauce","hoisin","worcestershire","liquid smoke","liquid seasoning","ketchup","catsup","mustard","mayo","mayonnaise","sriracha","hot sauce","bbq sauce","bbq mustard","barbecue","dressing","relish","gochujang","teriyaki","cooking wine","mirin","sake","shaoxing","maggi","koji","sweet soy","tabasco","salsa","pesto","curry paste","dipping sauce","tempura","jam","jelly","honey","maple syrup","syrup"],"Oils, Vinegars & Condiments"],
   // --- Canned & Jarred ---
-  [["canned","beans","chickpea","kidney bean","black bean","garbanzo","tomato paste","tomato sauce","canned tomato","sweet corn","creamed corn","canned corn","peas","jarred","pickle","olives","pasta sauce","spaghetti sauce","refried"],"Canned & Jarred"],
+  [["canned","beans","chickpea","kidney bean","black bean","garbanzo","mung bean","tomato paste","tomato sauce","canned tomato","sweet corn","creamed corn","canned corn","peas","jarred","pickle","peperoncini","olives","pasta sauce","spaghetti sauce","refried","sundried tomato","sun dried tomato"],"Canned & Jarred"],
   // --- Grains & Pasta ---
-  [["rice","pasta","spaghetti","macaroni","noodle","ramen","udon","vermicelli","lasagna","bread","tortilla","oats","oatmeal","cereal","quinoa","couscous","barley","bun","bagel","grain"],"Grains & Pasta"],
+  [["rice noodle","rice paper","rice","pasta","spaghetti","macaroni","noodle","ramen","udon","vermicelli","lasagna","bread","tortilla","oats","oatmeal","cereal","quinoa","couscous","barley","bun","bagel","grain"],"Grains & Pasta"],
   // --- Fruits & Vegetables ---
-  [["apple","banana","orange","grape","berry","strawberr","blueberr","mango","melon","pineapple","lemon","lime","avocado","tomato","potato","onion","garlic","ginger","carrot","broccoli","cauliflower","spinach","lettuce","cabbage","cucumber","celery","mushroom","zucchini","squash","kalabasa","eggplant","okra","sprout","kangkong","bok choy","raisin","dried fruit","produce","vegetable","fruit"],"Fruits & Vegetables"],
+  [["apple","banana","orange","grape","berry","strawberr","blueberr","cranberr","mango","melon","pineapple","lemon","lime","avocado","tomato","potato","onion","garlic","ginger","carrot","broccoli","cauliflower","spinach","lettuce","cabbage","cucumber","celery","mushroom","zucchini","squash","kalabasa","eggplant","okra","sprout","kangkong","bok choy","malunggay","sitaw","lemongrass","raisin","dried fruit","produce","vegetable","fruit"],"Fruits & Vegetables"],
   // --- Snacks ---
   [["chip","nuts","almond","cashew","peanut","granola","candy","chocolate","wafer","rice cake"],"Snacks"],
   // --- Beverages ---
-  [["water","soda","cola","coffee"," tea","milk tea","energy drink","gatorade","lemonade","beer","wine","liquor","kombucha","sparkling","soft drink"],"Beverages"],
+  [["water","soda","cola","coffee"," tea","milk tea","energy drink","gatorade","lemonade","beer","wine ","liquor","kombucha","sparkling","soft drink"],"Beverages"],
   // --- Supplements ---
   [["protein powder","whey","creatine","collagen","vitamin","supplement","pre-workout","bcaa"],"Supplements"],
 ];
