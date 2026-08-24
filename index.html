@@ -382,13 +382,12 @@ body.viewonly .vobadge{display:block}
       <img class="pv" id="photoPreview" alt="">
       <div id="photoHint">📷 No photo yet</div>
       <div class="chipbtns">
-        <button class="chip" id="chipIdentify">🪄 Identify (photo)</button>
-        <button class="chip" id="chipScanItem">📸 Scan barcode</button>
-        <button class="chip" id="chipFindImg">🔎 Find image</button>
-        <button class="chip" id="chipPhoto">🖼️ Add photo</button>
+        <button class="chip" id="chipScanItem">📷 Scan barcode → auto-fill name</button>
+        <button class="chip" id="chipFindImg">🔎 Find image by name</button>
+        <button class="chip" id="chipPhoto">🖼️ Add your own photo</button>
       </div>
     </div>
-    <div class="sub-hint">“Find image” looks up a product photo by name (Open Food Facts). Scanning a barcode is more accurate. You can also take your own photo.</div>
+    <div class="sub-hint">Scanning the barcode is the reliable way to auto-fill the name (looks it up in a food database). “Find image” searches by the name you typed. Or add your own photo.</div>
 
     <div class="field">
       <label>Item name</label>
@@ -432,9 +431,10 @@ body.viewonly .vobadge{display:block}
         <input id="fExp" type="date">
       </div>
       <div class="field" style="flex:0 0 auto;display:flex;align-items:flex-end">
-        <button class="chip" id="chipScanDate" style="margin-bottom:14px">📅 Scan</button>
+        <button class="chip" id="chipScanDate" style="margin-bottom:14px">📷 Try scan</button>
       </div>
     </div>
+    <div class="sub-hint" style="margin:-8px 0 14px">Tap the date field to pick it (most reliable). “Try scan” reads the printed date on the label — handy, but check it before saving.</div>
 
     <div class="field">
       <label>Opened? (starts the freshness timer)</label>
@@ -2085,13 +2085,12 @@ const camView=$("#camView"), camVideo=$("#camVideo");
 
 async function openCamera(mode){
   camMode=mode;
-  const isCapture=(mode==="photo"||mode==="identify");
-  $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":mode==="identify"?"IDENTIFY":"PHOTO";
+  $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":"PHOTO";
   $("#camHint").textContent = mode==="barcode"?"Line up the product barcode":
-    mode==="date"?"Scanning for date…":mode==="identify"?"Fill the frame with the item or its label, then tap":"Tap to capture";
-  $("#camHint").classList.toggle("scanning",mode==="date");
-  $("#camScanBox").style.display = isCapture?"none":"block";
-  $("#camScanBox").classList.toggle("scanning",mode==="date");
+    mode==="date"?"Frame the printed date inside the box, hold steady, then tap the shutter":"Tap to capture";
+  $("#camHint").classList.remove("scanning");
+  $("#camScanBox").style.display = mode==="photo"?"none":"block";
+  $("#camScanBox").classList.remove("scanning");
   try{
     // Ask for a sharp rear-camera feed; fall back to a basic request if the device refuses it
     let want={video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}},audio:false};
@@ -2103,7 +2102,7 @@ async function openCamera(mode){
     try{ await camVideo.play(); }catch(e){}
     camView.style.display="flex";
     if(mode==="barcode") startBarcodeScan();
-    if(mode==="date") startDateScan();
+    if(mode==="date") getOcrWorker().catch(()=>{});   // warm up so the shutter tap reads fast
   }catch(err){
     toast("Camera unavailable — use Add photo instead","warn");
     photoMode=mode; fileInput.click();
@@ -2148,7 +2147,6 @@ async function startDateScan(){
 $("#camClose").addEventListener("click",closeCamera);
 $("#camCancel2").addEventListener("click",closeCamera);
 
-$("#chipIdentify").addEventListener("click",()=>openCamera("identify"));
 $("#chipScanItem").addEventListener("click",()=>openCamera("barcode"));
 $("#chipFindImg").addEventListener("click",findImageByName);
 $("#chipScanDate").addEventListener("click",()=>openCamera("date"));
@@ -2340,10 +2338,6 @@ $("#camShutter").addEventListener("click",async()=>{
     const shots=[captureDateRegion(false),captureDateRegion(true)];
     closeCamera();
     await ocrDate(shots);
-  }else if(camMode==="identify"){
-    const shot=toThumb(camVideo,720,0.78);   // higher-res so OCR can read the label
-    closeCamera();
-    await identifyPhoto(shot);
   }else{
     pendingPhoto=toThumb(camVideo,420,0.62); closeCamera(); showPhoto(pendingPhoto); toast("Photo captured","good");
   }
@@ -2373,7 +2367,7 @@ function captureDateRegion(soft){
   return c.toDataURL("image/png");
 }
 
-/* ----- OCR expiry date via Tesseract.js (lazy CDN load) ----- */
+/* ----- OCR expiry date via Tesseract.js (lazy CDN load + a warm, reused worker) ----- */
 let tessLoaded=false;
 function loadTesseract(){
   return new Promise((res,rej)=>{
@@ -2385,29 +2379,42 @@ function loadTesseract(){
     document.head.appendChild(s);
   });
 }
+// One worker, created once and kept warm — repeat scans are ~1-2s instead of ~10s.
+let ocrWorker=null, ocrWorkerP=null;
+function getOcrWorker(){
+  if(ocrWorker) return Promise.resolve(ocrWorker);
+  if(ocrWorkerP) return ocrWorkerP;
+  ocrWorkerP=(async()=>{
+    await loadTesseract();
+    const w=await Tesseract.createWorker("eng");
+    await w.setParameters({tessedit_char_whitelist:"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz /.:-",tessedit_pageseg_mode:"6"});
+    ocrWorker=w; return w;
+  })();
+  return ocrWorkerP;
+}
+// Reject nonsense reads (e.g. "2035") — a real best-before is within a sane window of today.
+function plausibleExpiry(iso){
+  if(!iso) return false;
+  const d=new Date(iso+"T00:00:00"); if(isNaN(d)) return false;
+  const now=new Date();
+  const past=new Date(now); past.setFullYear(now.getFullYear()-2);
+  const future=new Date(now); future.setFullYear(now.getFullYear()+6);
+  return d>=past && d<=future;
+}
 async function ocrDate(imgs){
   const list=Array.isArray(imgs)?imgs:[imgs];
   toast("🔎 Reading date…","good");
   try{
-    await loadTesseract();
-    let worker=null;
-    try{
-      worker=await Tesseract.createWorker("eng");
-      await worker.setParameters({tessedit_char_whitelist:"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz /.:-",tessedit_pageseg_mode:"6"});
-    }catch(e){}
+    const worker=await getOcrWorker();
     let iso=null;
     for(const dataUrl of list){
-      let text="";
-      try{
-        if(worker){ const r=await worker.recognize(dataUrl); text=r.data.text||""; }
-        else { const r=await Tesseract.recognize(dataUrl,"eng"); text=r.data.text||""; }
-      }catch(e){}
-      iso=parseDate(text); if(iso) break;
+      let text=""; try{ const r=await worker.recognize(dataUrl); text=r.data.text||""; }catch(e){}
+      const cand=parseDate(text);
+      if(cand && plausibleExpiry(cand)){ iso=cand; break; }
     }
-    if(worker){ try{ await worker.terminate(); }catch(e){} }
-    if(iso){ $("#fExp").value=iso; updateFreshInfo(); toast("📅 Found expiry: "+iso,"good"); }
-    else { toast("Couldn't read it — hold steady & fill the box with just the date, or type it","warn"); }
-  }catch(e){ toast("OCR unavailable (offline?) — type the date","warn"); }
+    if(iso){ $("#fExp").value=iso; updateFreshInfo(); toast("📅 Read "+iso+" — double-check it's right","good"); }
+    else { toast("Couldn't read it clearly — tap the date field to pick it instead","warn"); }
+  }catch(e){ toast("Scanner unavailable — tap the date field to pick it","warn"); }
 }
 // Robust parser: handles 19 AUG 2026 · AUG 2026 · 2026-08-19 · 19/08/2026 · 08/2026 · full month names · BB/EXP prefixes
 function parseDate(raw){
