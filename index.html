@@ -402,7 +402,7 @@ body.viewonly .vobadge{display:block}
     <div class="field">
       <label>Where it lives</label>
       <div class="seg" id="segStore">
-        <button data-v="pantry" class="on">🗄️ Pantry</button>
+        <button data-v="pantry" class="on">🧺 Pantry</button>
         <button data-v="fridge">❄️ Fridge</button>
         <button data-v="freezer">🧊 Freezer</button>
       </div>
@@ -765,6 +765,11 @@ const ITEM_EMOJI=[
   [["garlic"],"🧄"],[["onion"],"🧅"],[["ginger"],"🫚"],[["corn"],"🌽"],[["potato"],"🥔"],[["peanut"],"🥜"],[["sesame"],"🌰"],
   [["rice noodle","noodle","udon","ramen","pasta","spaghetti","lasagna","vermicelli"],"🍜"],[["rice"],"🍚"],[["oats"],"🥣"],[["bean","mung"],"🫘"],[["flour","semolina","tapioca","starch"],"🌾"],[["pan bread","loaf","bun","bread"],"🍞"],[["tortilla"],"🌮"],
   [["honey","molasses","syrup"],"🍯"],[["icing","powdered sugar","sugar"],"🍬"],
+  [["chocolate","hershey","kitkat","kit kat","snickers","cadbury","candy bar","nutella","wafer"],"🍫"],
+  [["gelatin","gelatine","jello","jell-o","gulaman","agar"],"🍮"],
+  [["cookie","biscuit"],"🍪"],[["cracker","rice cake"],"🍘"],[["pretzel"],"🥨"],[["popcorn"],"🍿"],
+  [["potato chip","tortilla chip","corn chip","kettle chip","chips","crisps"],"🍟"],
+  [["candy","gummy","lollipop","marshmallow"],"🍬"],[["jam","jelly","marmalade"],"🍓"],[["granola","trail mix"],"🥣"],[["jerky"],"🥩"],
   [["cinnamon","cumin","coriander","turmeric","oregano","basil","thyme","bay leaf","sage","anise","clove","cardamon","cardamom","fennel","tarragon","curry","seasoning","savoury","baking soda","baking powder","cornstarch"],"🧂"],
   [["olive","canola","sesame oil","cooking spray","oil"],"🫒"],[["vinegar"],"🍶"],
   [["gochujang","black bean paste","curry paste"],"🌶️"],
@@ -1381,9 +1386,35 @@ const FRESH=[
   [["cranberr","raisin","dried fruit"],{fridge:180,freezer:365,pantry:180}],
   [["c2","juice","tea drink","bottled"],{fridge:5,freezer:0,pantry:1}],
 ];
-function shelfLife(name){
+const CAT_SHELF={
+  "Proteins":{fridge:3,freezer:120,pantry:1},
+  "Dairy & Refrigerated":{fridge:7,freezer:60,pantry:1},
+  "Fruits & Vegetables":{fridge:7,freezer:120,pantry:2},
+  "Grains & Pasta":{fridge:180,freezer:365,pantry:180},
+  "Canned & Jarred":{fridge:5,freezer:0,pantry:1},
+  "Oils, Vinegars & Condiments":{fridge:180,freezer:0,pantry:120},
+  "Baking":{fridge:180,freezer:365,pantry:180},
+  "Spices & Seasonings":{fridge:365,freezer:365,pantry:365},
+  "Snacks":{fridge:30,freezer:60,pantry:14},
+  "Beverages":{fridge:5,freezer:0,pantry:7},
+  "Frozen":{fridge:2,freezer:180,pantry:0},
+  "Supplements":{fridge:0,freezer:0,pantry:365},
+  "Protein":{fridge:3,freezer:120,pantry:1},
+  "Dairy/Non-Dairy":{fridge:7,freezer:60,pantry:1},
+  "Fruit/Veggies":{fridge:7,freezer:120,pantry:2},
+  "Pasta/Grains/Noodles":{fridge:180,freezer:365,pantry:180},
+  "Canned/Soup":{fridge:5,freezer:0,pantry:1},
+  "Sauces/Oils":{fridge:180,freezer:0,pantry:120},
+  "Condiments":{fridge:120,freezer:0,pantry:90},
+  "Seasonings":{fridge:365,freezer:365,pantry:365},
+  "Cooking Spices":{fridge:365,freezer:365,pantry:365},
+  "Dried":{fridge:180,freezer:365,pantry:180},
+  "Other":{fridge:14,freezer:90,pantry:30}
+};
+function shelfLife(name,cat){
   const n=(name||"").toLowerCase();
   for(const [kws,d] of FRESH){ for(const kw of kws){ if(n.includes(kw)) return d; } }
+  if(cat && CAT_SHELF[cat]) return CAT_SHELF[cat];
   return null;
 }
 
@@ -1546,7 +1577,7 @@ function freshStatus(item){
   // Returns {useBy, daysLeft, label, level} or null
   let useBy=null, source=null;
   if(item.opened){
-    const sl=shelfLife(item.name);
+    const sl=shelfLife(item.name,item.category);
     if(sl){
       let d=sl[item.store]??sl.pantry;
       if(d>0 && item.vac) d=Math.round(d*vacMult(item.store));
@@ -1580,16 +1611,17 @@ function itemMatchesSearch(it){
 
 function pctClass(p){ if(p==null) return ""; if(p<=25) return "low"; if(p<=60) return "mid"; return ""; }
 
-function itemCardHTML(it,mode){
+function itemCardHTML(it,mode,showCat){
   const fs=freshStatus(it);
   const catIco=CAT_ICON[it.category]||"📦";
   const thumb=itemThumb(it);
   let sub=[];
   if(mode==="grocery"){ sub.push(`<span class="pill cat">${catIco} ${it.category}</span>`); }
+  else if(showCat){ sub.push(`<span class="pill cat">${catIco} ${it.category}</span>`); }
   if(it.qty) sub.push(`<span>${escapeHtml(it.qty)}</span>`);
   if(fs){ sub.push(`<span class="pill ${fs.level==='bad'?'bad':fs.level==='warn'?'warn':'ok'}">${fs.level==='ok'?'🟢':fs.level==='warn'?'⏳':'⚠️'} ${fs.label}</span>`); }
   if(mode!=="grocery" && it.opened) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
-  else if(mode!=="grocery" && !it.opened && shelfLife(it.name)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
+  else if(mode!=="grocery" && !it.opened && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
   if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
 
   const barHTML=(it.percent!=null)?`<div class="bar ${pctClass(it.percent)}"><i style="width:${it.percent}%"></i></div>`:"";
@@ -1642,7 +1674,7 @@ function renderPantry(){
     if(inFridge+inFreezer>0 || storeFilter){
       summary+=`<div class="storechips">`+
         `<div class="sc ${!storeFilter?'on':''}" data-storefilter="all">All <span class="n">${total}</span></div>`+
-        `<div class="sc ${storeFilter==='pantry'?'on':''}" data-storefilter="pantry">🗄️ Pantry <span class="n">${inPantry}</span></div>`+
+        `<div class="sc ${storeFilter==='pantry'?'on':''}" data-storefilter="pantry">🧺 Pantry <span class="n">${inPantry}</span></div>`+
         `<div class="sc ${storeFilter==='fridge'?'on':''}" data-storefilter="fridge">❄️ Fridge <span class="n">${inFridge}</span></div>`+
         `<div class="sc ${storeFilter==='freezer'?'on':''}" data-storefilter="freezer">🧊 Freezer <span class="n">${inFreezer}</span></div>`+
       `</div>`;
@@ -1687,7 +1719,7 @@ function renderPantry(){
     if(state.settings.sort==="name") sorted.sort((a,b)=>a.name.localeCompare(b.name));
     if(state.settings.sort==="low") sorted.sort((a,b)=>(a.percent??999)-(b.percent??999));
     if(state.settings.sort==="expiry") sorted.sort((a,b)=>{const fa=freshStatus(a),fb=freshStatus(b);return (fa?fa.daysLeft:9999)-(fb?fb.daysLeft:9999);});
-    html+=`<div class="card">`+sorted.map(i=>itemCardHTML(i,"pantry")).join("")+`</div>`;
+    html+=`<div class="card">`+sorted.map(i=>itemCardHTML(i,"pantry",true)).join("")+`</div>`;
   }
   host.innerHTML=html;
 }
@@ -1972,7 +2004,7 @@ function updateFreshInfo(){
   const exp=$("#fExp").value;
   const vac=$("#fVac")?$("#fVac").checked:false;
   const tmp={name:nm,store:storeVal,opened:opened||null,exp:exp||null,vac};
-  const sl=shelfLife(nm);
+  const sl=shelfLife(nm, $("#fCat")&&$("#fCat").value);
   let html="";
   if(opened && sl){
     let d=sl[storeVal]??sl.pantry;
@@ -2271,7 +2303,7 @@ function guessNameFromLabel(raw){
   return best?titleCase(best.toLowerCase()):null;
 }
 async function lookupBarcode(code){
-  toast("🔎 Looking up "+code+"…","good");
+  toast("🔎 Looking up product…","good");
   // 1) Open Food Facts
   try{
     const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,categories_tags,image_front_small_url`);
@@ -2300,7 +2332,7 @@ async function lookupBarcode(code){
       return;
     }
   }catch(e){}
-  toast("Barcode "+code+" not found — type the name","warn");
+  toast("Couldn't find this product — type the name","warn");
 }
 // Fill the add-item form from a barcode result
 function applyBarcodeResult(nm, catGuess, imgUrl){
@@ -2388,10 +2420,12 @@ function captureDateRegion(soft){
 // A plain colour crop of the scan box — the AI reads a normal photo better than a thresholded one.
 function captureDateRegionRaw(){
   const v=camVideo, vw=v.videoWidth||1280, vh=v.videoHeight||720;
-  const bx=Math.round(vw*0.06), by=Math.round(vh*0.28), bw=Math.round(vw*0.88), bh=Math.round(vh*0.34);
-  const c=document.createElement("canvas"); c.width=bw; c.height=bh;
-  c.getContext("2d").drawImage(v, bx,by,bw,bh, 0,0,bw,bh);
-  return c.toDataURL("image/jpeg",0.85);
+  // Send the FULL frame to the AI - it locates the date anywhere on the label,
+  // so the user no longer has to line the stamp up inside a small box.
+  const maxW=1400, scale=Math.min(1, maxW/vw);
+  const c=document.createElement("canvas"); c.width=Math.round(vw*scale); c.height=Math.round(vh*scale);
+  c.getContext("2d").drawImage(v, 0,0, c.width,c.height);
+  return c.toDataURL("image/jpeg",0.9);
 }
 async function geminiReadDate(dataUrl){
   const b64=dataUrl.split(",")[1];
