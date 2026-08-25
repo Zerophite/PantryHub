@@ -2433,8 +2433,11 @@ async function geminiReadDate(dataUrl){
   // Calls YOUR private Cloudflare Worker (window.GEMINI_PROXY) — the key lives there, not here.
   const r=await fetch(window.GEMINI_PROXY,{method:"POST",headers:{"Content-Type":"application/json"},
     body:JSON.stringify({b64:b64,mime:mime,today:todayISO()})});
-  if(!r.ok) throw new Error("proxy "+r.status);
-  const j=await r.json();
+  const raw=await r.text();
+  let j={}; try{ j=JSON.parse(raw); }catch(e){}
+  console.log("[geminiReadDate] status",r.status,"body",raw.slice(0,300));
+  if(!r.ok) throw new Error("proxy HTTP "+r.status+" "+raw.slice(0,140));
+  if(j.error) throw new Error(String(j.error).slice(0,140));   // real Gemini error surfaces here
   const m=String((j&&j.date)||"").match(/(\d{4})-(\d{2})-(\d{2})/);
   return m ? m[0] : null;
 }
