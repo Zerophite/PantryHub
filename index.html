@@ -367,7 +367,7 @@ body.viewonly .vobadge{display:block}
 <button class="fab" id="fabAdd" title="Add item">＋</button>
 
 <nav class="tabs">
-  <button class="tabbtn on" data-tab="pantry"><span class="ti">🥫</span>Pantry</button>
+  <button class="tabbtn on" data-tab="pantry"><span class="ti">🧺</span>Pantry</button>
   <button class="tabbtn" data-tab="grocery"><span class="ti">🛒</span><span class="badge" id="groBadge" style="display:none">0</span>Grocery</button>
   <button class="tabbtn" data-tab="notes"><span class="ti">📝</span>Notes</button>
 </nav>
@@ -2594,7 +2594,7 @@ function handleVoice(t, original){
   // normalize number words
   const numWords={one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90,quarter:25,half:50,fifty:50,twentyfive:25,hundred:100,full:100,empty:0};
   const numWord=w=>numWords[w]!=null?numWords[w]:(/^\d+$/.test(w)?parseInt(w,10):null);
-  const cleanName=s=>(s||"").replace(/(left|remaining|remain|in stock|in the pantry|in the fridge|in the freezer|in pantry|in fridge|in freezer).*$/,"").replace(/^(of|the|my|some|a|an)s+/,"").replace(/s+(is|are|at|has|have|got|to)$/,"").replace(/s+/g," ").trim();
+  const cleanName=s=>(s||"").replace(/(left|remaining|remain|in stock|in the pantry|in the fridge|in the freezer|in pantry|in fridge|in freezer).*$/,"").replace(/^(of|the|my|some|a|an)\s+/,"").replace(/\s+(is|are|at|has|have|got|to)$/,"").replace(/\s+/g," ").trim();
   let m;
 
   // "check X" / "do i have X" / "is X available"
@@ -2623,7 +2623,7 @@ function handleVoice(t, original){
       pct=numWord(m[1]); name=m[2];
     }
     // item + number/word + (%|percent): "eggs 25%", "eggs are at 25 percent"
-    else if(m=t.match(/^(.+?)s+(?:is|are|at|has|have|got|to)?s*(d{1,3}|quarter|half|full|empty)s*(?:percent|%)/)){
+    else if(m=t.match(/^(.+?)\s+(?:is|are|at|has|have|got|to)?\s*(\d{1,3}|quarter|half|full|empty)\s*(?:percent|%)/)){
       name=m[1]; pct=numWord(m[2]);
     }
     // word amount + optional "left on/of" + item, no % sign: "half left on rice", "quarter of the milk"
@@ -2669,6 +2669,25 @@ function handleVoice(t, original){
         return true;
       }
       // if the item isn't found, fall through so "add"/other handlers can try
+    }
+  }
+
+  // ---- Bare trailing number = percent: "sesame oil 50" behaves like "50% sesame oil" ----
+  {
+    if(m=t.match(/^(.+?)\s+(\d{1,3}|quarter|half|full|empty)$/)){
+      const raw=numWord(m[2]);
+      const it=raw!=null?findItemByName(cleanName(m[1])):null;
+      if(it){
+        const pct=Math.max(0,Math.min(100,raw));
+        it.percent=pct;
+        if(it.location==="grocery" && pct>25){ it.location="pantry"; it.checked=false; }
+        save(); renderAll();
+        const lowNote=pct<=25?" — running low":"";
+        speak(`Set ${it.name} to ${pct} percent${lowNote}.`);
+        vlabel(`✅ ${it.name} → ${pct}%${lowNote}`);
+        toast(`✅ ${it.name} set to ${pct}%${lowNote}`,"good");
+        return true;
+      }
     }
   }
 
