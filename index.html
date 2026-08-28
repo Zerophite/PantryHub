@@ -506,6 +506,8 @@ body.viewonly .vobadge{display:block}
       <div id="advPantry" style="display:none;margin-top:6px">
         <div class="sub-hint" style="margin:0 0 6px">This only hides the pantry on this device — the code keeps working and your data stays in the cloud.</div>
         <button class="btn ghost" id="btnLeavePantry">🚪 Remove this pantry from this device</button>
+        <button class="btn danger" id="btnDeletePantry" style="display:none;margin-top:8px">🗑️ Delete this pantry permanently (for everyone)</button>
+        <div class="sub-hint" id="deletePantryHint" style="display:none;margin:6px 0 0">Only you (the owner) can do this. It erases the pantry from the cloud for <b>everyone</b> who has the code. This cannot be undone.</div>
       </div>
     </div>
 
@@ -3137,6 +3139,7 @@ if(window.CLOUD){
     $("#pantryCode").textContent=curId;
     $("#lockRow").style.display=owner?"flex":"none";
     $("#lockToggle").checked=!!curData.locked;
+    { const dp=$("#btnDeletePantry"), dh=$("#deletePantryHint"); if(dp){ dp.style.display=owner?"":"none"; } if(dh){ dh.style.display=owner?"":"none"; } }
     const hint=$("#shareMsg");
     if(!owner && curData.locked){ hint.className="cloudmsg"; hint.textContent="👁️ The owner set this to view-only."; }
     else hint.textContent="";
@@ -3169,6 +3172,22 @@ if(window.CLOUD){
     forget(curId);
     $("#settingsScrim").classList.remove("on");
     backToList();
+  });
+  $("#btnDeletePantry").addEventListener("click",async()=>{
+    if(!curId || !curData) return;
+    if(curData.ownerUid!==uid){ toast("Only the owner can delete this pantry","warn"); return; }
+    const nm=curData.name||"this pantry";
+    const items=((curData.state&&curData.state.items)||[]).length;
+    if(!confirm(`PERMANENTLY delete "${nm}" (${items} item(s)) from the cloud?\n\nEveryone with the code ${curId} loses it. This CANNOT be undone.`)) return;
+    const typed=prompt(`To confirm, type the pantry code exactly:\n${curId}`);
+    if((typed||"").trim().toUpperCase()!==curId){ toast("Code didn't match — nothing deleted","warn"); return; }
+    try{
+      await deleteDoc(doc(db,"pantries",curId));
+      forget(curId);
+      $("#settingsScrim").classList.remove("on");
+      toast("🗑️ Pantry permanently deleted","good");
+      backToList();
+    }catch(e){ toast("Delete failed: "+(e&&e.code||"error"),"bad"); }
   });
 
   /* ---------- helpers ---------- */
