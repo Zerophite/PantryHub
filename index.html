@@ -229,6 +229,9 @@ body.viewonly .cathead .catadd{display:none}
 .photobox .pv{width:120px;height:120px;border-radius:12px;object-fit:cover;display:none}
 .chipbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .chip{padding:9px 12px;border-radius:11px;background:#eef2ea;font-weight:600;font-size:13px;color:var(--green-d);display:inline-flex;align-items:center;gap:6px}
+.quickscan{display:flex;gap:10px;margin:4px 0 14px}
+.quickscan .qs{flex:1;padding:14px 8px;border-radius:14px;border:none;background:var(--green);color:#fff;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.quickscan .qs:active{transform:translateY(1px);opacity:.9}
 .chip:active{background:#dce7d6}
 
 .freshbox{background:#f1f8e9;border-radius:12px;padding:12px 14px;font-size:13px;color:#33691e;line-height:1.5;margin-top:6px}
@@ -377,6 +380,10 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="itemSheet">
     <div class="grab"></div>
     <h2 id="itemSheetTitle">Add Item</h2>
+    <div class="quickscan">
+      <button class="qs" id="qsBarcode">📷 Scan barcode</button>
+      <button class="qs" id="qsDate">📅 Scan expiry date</button>
+    </div>
 
     <div class="photobox" id="photoBox">
       <img class="pv" id="photoPreview" alt="">
@@ -490,6 +497,7 @@ body.viewonly .vobadge{display:block}
           <button class="btn sec" id="btnShareCode" style="margin:0">🔗 Share</button>
         </div>
         <div class="cloudmsg" id="shareMsg"></div>
+        <div class="sub-hint" style="margin:8px 0 0;color:var(--green-d);font-weight:600">🔑 This code IS your account. Copy it somewhere safe. Anyone — including you on a new phone — can restore this exact pantry by entering it under “Join with a code.” Lose the code with no other device signed in, and the pantry can’t be reached.</div>
         <label class="lockrow" id="lockRow" style="display:none">
           <input type="checkbox" id="lockToggle"><span>Only I can make changes<br><small>Others with the code can still view, but can’t edit.</small></span>
         </label>
@@ -519,6 +527,8 @@ body.viewonly .vobadge{display:block}
         <button class="btn sec" id="btnExport">⬇️ Export backup</button>
         <button class="btn sec" id="btnImport">⬆️ Import backup</button>
       </div>
+      <button class="btn ghost" id="btnRestoreSnap" style="display:none;margin-top:8px">↩︎ Undo last import / restore previous data</button>
+      <div class="sub-hint" id="snapHint" style="display:none;margin:6px 0 0"></div>
     </div>
 
     <div class="setblock">
@@ -527,7 +537,7 @@ body.viewonly .vobadge{display:block}
         <select id="setTheme"><option value="system">🌗 Match device</option><option value="light">☀️ Light</option><option value="dark">🌙 Dark</option></select>
       </label>
       <label class="setrow"><span>Default sort</span>
-        <select id="setSort"><option value="category">Category</option><option value="name">Name (A–Z)</option><option value="low">Running low first</option><option value="expiry">Expiring first</option></select>
+        <select id="setSort"><option value="category">Category</option><option value="newest">Newest first</option></select>
       </label>
     </div>
 
@@ -1239,7 +1249,7 @@ const CAT_RULES=[
   [["fish sauce"],"Oils, Vinegars & Condiments"],
   [["liquid seasoning","maggi","knorr"],"Oils, Vinegars & Condiments"],
   [["egg noodle","egg noodles"],"Grains & Pasta"],
-  [["cookie","biscuit","cracker","potato chip","tortilla chip","corn chip","kettle chip","crisps","popcorn","pretzel","granola bar","trail mix","jerky"],"Snacks"],
+  [["cookie","biscuit","cracker","potato chip","tortilla chip","corn chip","kettle chip","crisps","popcorn","pretzel","granola bar","trail mix","jerky","polvoron","goldilock","goldilocks"],"Snacks"],
   [["juice","smoothie"],"Beverages"],
   [["mccafe","ground coffee","instant coffee","espresso","coffee bean"],"Beverages"],
   [["soup","broth"],"Canned & Jarred"],
@@ -1424,6 +1434,7 @@ const KEY="pantry_grocery_v1";
 function load(){
   try{const raw=localStorage.getItem(KEY); if(raw){state=Object.assign(state,JSON.parse(raw));}}catch(e){}
   if(!state.catPrefs) state.catPrefs={};
+  if(state.settings && !["category","newest"].includes(state.settings.sort)) state.settings.sort="category";
   // In cloud mode we never auto-seed: a new account starts empty and data arrives from Firestore.
   if(!CLOUD){
     if(!state.items.length && !localStorage.getItem(KEY+"_seeded")){ seed(); localStorage.setItem(KEY+"_seeded","1"); }
@@ -1619,7 +1630,7 @@ function itemCardHTML(it,mode,showCat){
   if(mode==="grocery"){ sub.push(`<span class="pill cat">${catIco} ${it.category}</span>`); }
   else if(showCat){ sub.push(`<span class="pill cat">${catIco} ${it.category}</span>`); }
   if(it.qty) sub.push(`<span>${escapeHtml(it.qty)}</span>`);
-  if(fs){ sub.push(`<span class="pill ${fs.level==='bad'?'bad':fs.level==='warn'?'warn':'ok'}">${fs.level==='ok'?'🟢':fs.level==='warn'?'⏳':'⚠️'} ${fs.label}</span>`); }
+  if(fs && mode!=="grocery"){ sub.push(`<span class="pill ${fs.level==='bad'?'bad':fs.level==='warn'?'warn':'ok'}">${fs.level==='ok'?'🟢':fs.level==='warn'?'⏳':'⚠️'} ${fs.label}</span>`); }
   if(mode!=="grocery" && it.opened) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
   else if(mode!=="grocery" && !it.opened && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
   if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
@@ -1632,7 +1643,6 @@ function itemCardHTML(it,mode,showCat){
       <div class="body" data-edit="${it.id}">
         <div class="nm">${escapeHtml(it.name)}</div>
         <div class="sub">${sub.join("")}</div>
-        ${it.percent!=null?`<div class="sub" style="margin-top:2px"><span class="pill warn">${it.percent}% left</span></div>`:""}
       </div>
       <div class="act"><button class="moveBtn" data-move="${it.id}" title="Back to pantry">↩︎</button></div>
     </div>`;
@@ -1715,10 +1725,8 @@ function renderPantry(){
     if(others.length){ html+=catHeadHTML("Other",others.length,{add:true}); html+=`<div class="card">`+others.map(i=>itemCardHTML(i,"pantry")).join("")+`</div>`; }
     html+=emptyCatsHTML();   // your empty categories, so you can add items into them
   }else{
-    const sorted=[...items];
-    if(state.settings.sort==="name") sorted.sort((a,b)=>a.name.localeCompare(b.name));
-    if(state.settings.sort==="low") sorted.sort((a,b)=>(a.percent??999)-(b.percent??999));
-    if(state.settings.sort==="expiry") sorted.sort((a,b)=>{const fa=freshStatus(a),fb=freshStatus(b);return (fa?fa.daysLeft:9999)-(fb?fb.daysLeft:9999);});
+    const createdOf=it=> it.created || (typeof it.id==="string" ? (parseInt(it.id.slice(0,-5),36)||0) : 0);
+    const sorted=[...items].sort((a,b)=>createdOf(b)-createdOf(a));   // newest first
     html+=`<div class="card">`+sorted.map(i=>itemCardHTML(i,"pantry",true)).join("")+`</div>`;
   }
   host.innerHTML=html;
@@ -1843,17 +1851,16 @@ function markUnopened(id){
 function newBatch(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
-  if(!confirm(`Start a NEW batch of “${it.name}”?\n\nThis resets the freshness timer to today and refills it to 100%. Use this when you've replaced it with a fresh one.`)) return;
-  it.opened=todayISO(); it.percent=100;
+  if(!confirm(`Start a NEW batch of “${it.name}”?\n\nThis marks it UNOPENED again, clears the old expiry date, and refills to 100%. Use this when you've replaced it with a fresh one.`)) return;
+  it.opened=null; it.percent=100; it.exp=null;
   save(); renderAll();
-  const fs=freshStatus(it);
-  toast(fs?`🔄 New batch — best used within ${fs.daysLeft} day(s)`:`🔄 New batch started`,"good");
+  toast(`🔄 New batch — “${it.name}” is fresh & unopened again`,"good");
 }
 function moveItem(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
   it.location = it.location==="pantry" ? "grocery" : "pantry";
-  if(it.location==="grocery") it.checked=false;
+  if(it.location==="grocery"){ it.checked=false; it.exp=null; it.opened=null; it.percent=null; }
   save(); renderAll();
   toast(it.location==="grocery"?`🛒 “${it.name}” added to Grocery`:`↩︎ “${it.name}” back in Pantry`,"good");
 }
@@ -1870,8 +1877,8 @@ $("#btnClearChecked").addEventListener("click",()=>{
 
 /* sort */
 $("#btnSort").addEventListener("click",()=>{
-  const opts=["category","name","low","expiry"];
-  const labels={category:"Category",name:"Name (A–Z)",low:"Running low first",expiry:"Expiring first"};
+  const opts=["category","newest"];
+  const labels={category:"Category",newest:"Newest first"};
   const cur=state.settings.sort||"category";
   const next=opts[(opts.indexOf(cur)+1)%opts.length];
   state.settings.sort=next; save(); renderAll();
@@ -2043,7 +2050,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
     toast("✓ Saved","good");
   }else{
     // duplicate warn but allow
-    state.items.push(Object.assign({id:uid(),location:"pantry",checked:false},data));
+    state.items.push(Object.assign({id:uid(),created:Date.now(),location:"pantry",checked:false},data));
     toast(`✓ “${name}” added to ${data.category}`,"good");
   }
   if(ensureCat(data.category)){ rebuildCats(); renderCatList(); }   // auto-create the category if it's new
@@ -2191,6 +2198,8 @@ $("#camClose").addEventListener("click",closeCamera);
 $("#camCancel2").addEventListener("click",closeCamera);
 
 $("#chipScanItem").addEventListener("click",()=>openCamera("barcode"));
+$("#qsBarcode").addEventListener("click",()=>openCamera("barcode"));
+$("#qsDate").addEventListener("click",()=>openCamera("date"));
 $("#chipFindImg").addEventListener("click",findImageByName);
 $("#chipScanDate").addEventListener("click",()=>openCamera("date"));
 
@@ -2699,7 +2708,7 @@ function handleVoice(t, original){
     const name=cleanName(t.replace(/^(no more|out of|ran out of)\s+/,""));
     const it=findItemByName(name);
     if(it){
-      it.location="grocery"; it.checked=false; if(it.percent!=null)it.percent=0;
+      it.location="grocery"; it.checked=false; it.exp=null; it.opened=null; it.percent=null;
       save(); renderAll();
       speak(`${it.name} moved to your grocery list.`);
       vlabel(`🛒 ${it.name} → grocery list`);
@@ -2799,7 +2808,7 @@ $("#btnSettings").addEventListener("click",openSettings);
 $("#btnCloseSettings").addEventListener("click",()=>settingsScrim.classList.remove("on"));
 settingsScrim.addEventListener("click",e=>{ if(e.target===settingsScrim) settingsScrim.classList.remove("on"); });
 
-function openSettings(){ renderCatList(); $("#setSort").value=state.settings.sort||"category"; $("#setTheme").value=currentTheme(); const db=$("#dangerBox"); if(db) db.style.display="none"; const ap=$("#advPantry"); if(ap) ap.style.display="none"; settingsScrim.classList.add("on"); }
+function openSettings(){ renderCatList(); $("#setSort").value=(state.settings.sort==="newest"?"newest":"category"); $("#setTheme").value=currentTheme(); const db=$("#dangerBox"); if(db) db.style.display="none"; const ap=$("#advPantry"); if(ap) ap.style.display="none"; updateSnapUI(); settingsScrim.classList.add("on"); }
 
 function renderCatList(){
   const host=$("#catList");
@@ -2866,6 +2875,31 @@ $("#setTheme").addEventListener("change",()=>{ const t=$("#setTheme").value; loc
 applyTheme(currentTheme());
 
 /* Export / Import / Reset */
+// Safety snapshot taken before any destructive action (import / reset) so it can be undone in one tap.
+const SNAP_KEY=KEY+"_snap";
+function safetySnapshot(reason){
+  try{ localStorage.setItem(SNAP_KEY, JSON.stringify({at:new Date().toISOString(),reason,state})); }catch(e){}
+  updateSnapUI();
+}
+function updateSnapUI(){
+  const b=$("#btnRestoreSnap"), h=$("#snapHint"); if(!b||!h) return;
+  let snap=null; try{ snap=JSON.parse(localStorage.getItem(SNAP_KEY)||"null"); }catch(e){}
+  if(snap && snap.state){
+    b.style.display=""; h.style.display="";
+    const n=(snap.state.items||[]).length;
+    let when=snap.at; try{ when=new Date(snap.at).toLocaleString(); }catch(e){}
+    h.textContent="Saved before "+snap.reason+" · "+n+" item(s) · "+when;
+  }else{ b.style.display="none"; h.style.display="none"; }
+}
+$("#btnRestoreSnap").addEventListener("click",()=>{
+  let snap=null; try{ snap=JSON.parse(localStorage.getItem(SNAP_KEY)||"null"); }catch(e){}
+  if(!snap||!snap.state){ toast("Nothing to restore","warn"); return; }
+  const n=(snap.state.items||[]).length;
+  if(!confirm("Restore your data from before the "+snap.reason+"?\n\nThis replaces the current list with "+n+" item(s).")) return;
+  state=Object.assign({items:[],notes:[],settings:{sort:"category"}},snap.state);
+  rebuildCats(); save(); renderCatList(); renderAll();
+  toast("↩︎ Previous data restored","good");
+});
 $("#btnExport").addEventListener("click",()=>{
   const data=JSON.stringify({v:1,exported:new Date().toISOString(),state},null,2);
   const blob=new Blob([data],{type:"application/json"});
@@ -2889,6 +2923,7 @@ importInput.addEventListener("change",()=>{
       const s=j.state||j;
       if(!s.items||!Array.isArray(s.items)) throw 0;
       if(!confirm(`Import ${s.items.length} item(s)? This replaces your current list.`)) return;
+      safetySnapshot("import");   // so a wrong import can be undone
       state=Object.assign({items:[],notes:[],settings:{sort:"category"}},s);
       rebuildCats(); save(); renderCatList(); renderAll();
       toast("Backup imported ✓","good");
@@ -2901,7 +2936,8 @@ $("#btnShowDanger").addEventListener("click",()=>{
   const b=$("#dangerBox"); b.style.display = b.style.display==="none" ? "" : "none";
 });
 $("#btnReset").addEventListener("click",()=>{
-  if(!confirm("Erase everything and re-seed the starter pantry? This cannot be undone.")) return;
+  if(!confirm("Erase everything and re-seed the starter pantry?")) return;
+  safetySnapshot("reset");   // so a reset can be undone from Backup & data
   [KEY, KEY+"_seeded", KEY+"_gro_v1", KEY+"_cat_v2", "voice_hint"].forEach(k=>localStorage.removeItem(k));
   state={items:[],notes:[],settings:{sort:"category"}};
   load(); renderCatList(); renderAll();
