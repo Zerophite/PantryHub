@@ -497,7 +497,7 @@ body.viewonly .vobadge{display:block}
           <button class="btn sec" id="btnShareCode" style="margin:0">🔗 Share</button>
         </div>
         <div class="cloudmsg" id="shareMsg"></div>
-        <div class="sub-hint" style="margin:8px 0 0;color:var(--green-d);font-weight:600">🔑 This code IS your account. Copy it somewhere safe. Anyone — including you on a new phone — can restore this exact pantry by entering it under “Join with a code.” Lose the code with no other device signed in, and the pantry can’t be reached.</div>
+        <div class="sub-hint" style="margin:8px 0 0">💡 Jot this code down somewhere safe — it’s your way back in if you ever switch phones or clear your browser.</div>
         <label class="lockrow" id="lockRow" style="display:none">
           <input type="checkbox" id="lockToggle"><span>Only I can make changes<br><small>Others with the code can still view, but can’t edit.</small></span>
         </label>
@@ -506,8 +506,9 @@ body.viewonly .vobadge{display:block}
       <div id="advPantry" style="display:none;margin-top:6px">
         <div class="sub-hint" style="margin:0 0 6px">This only hides the pantry on this device — the code keeps working and your data stays in the cloud.</div>
         <button class="btn ghost" id="btnLeavePantry">🚪 Remove this pantry from this device</button>
-        <button class="btn danger" id="btnDeletePantry" style="display:none;margin-top:8px">🗑️ Delete this pantry permanently (for everyone)</button>
-        <div class="sub-hint" id="deletePantryHint" style="display:none;margin:6px 0 0">Only you (the owner) can do this. It erases the pantry from the cloud for <b>everyone</b> who has the code. This cannot be undone.</div>
+        <div class="sub-hint" style="margin:12px 0 4px">🆔 Your account ID — send this to the owner if they need to make you the owner:</div>
+        <div class="codebox" style="font-size:11px;word-break:break-all;text-align:left"><span id="myUid">—</span></div>
+        <button class="btn sec" id="btnCopyUid" style="margin-top:6px">📋 Copy my account ID</button>
       </div>
     </div>
 
@@ -520,6 +521,8 @@ body.viewonly .vobadge{display:block}
         <input id="newCatName" placeholder="New category name">
         <button class="chip" id="btnAddCat" style="flex:0 0 auto">＋ Add</button>
       </div>
+      <button class="btn sec" id="btnAutoSort" style="margin-top:10px">🔄 Auto-sort items into categories</button>
+      <div class="sub-hint" style="margin:6px 0 0">Re-files every item into its best-matching category (by name). Only moves items into categories you already have. Undoable from Backup &amp; data.</div>
     </div>
 
     <div class="setblock">
@@ -547,8 +550,8 @@ body.viewonly .vobadge{display:block}
       <div class="setlabel" style="color:var(--red)">Danger zone</div>
       <button class="btn ghost dzlink" id="btnShowDanger">⚠️ Show danger zone…</button>
       <div id="dangerBox" style="display:none;margin-top:8px">
-        <div class="sub-hint" style="margin:0 0 8px;color:var(--red)">This erases everything and cannot be undone.</div>
-        <button class="btn danger" id="btnReset">Reset everything (re-seed from scratch)</button>
+        <button class="btn danger" id="btnDeletePantry" style="display:none">🗑️ Delete this pantry permanently (for everyone)</button>
+        <div class="sub-hint" id="deletePantryHint" style="display:none;margin:6px 0 0">Only the owner can do this. It removes the pantry from the cloud for everyone who has the code — there's no undo.</div>
       </div>
     </div>
 
@@ -774,6 +777,7 @@ const ITEM_EMOJI=[
   [["spinach","bok choy","kangkong","malunggay","kalabasa","sitaw","lettuce","cabbage","greens","dahon","kelp","lemongrass"],"🥬"],
   [["bell pepper"],"🫑"],[["chili","pepper flake","cayenne","paprika"],"🌶️"],
   [["lemon"],"🍋"],[["lime"],"🍋"],[["mango"],"🥭"],[["banana","strawber"],"🍓"],[["cranberr","grape","raisin"],"🍇"],[["apple"],"🍎"],[["tomato"],"🍅"],
+  [["orange","mandarin","tangerine","clementine"],"🍊"],[["watermelon"],"🍉"],[["cantaloupe","honeydew","melon"],"🍈"],[["peach","nectarine"],"🍑"],[["pear"],"🍐"],[["cherry","cherries"],"🍒"],[["kiwi"],"🥝"],[["pineapple"],"🍍"],[["avocado"],"🥑"],[["eggplant","aubergine"],"🍆"],[["cucumber"],"🥒"],[["pumpkin","kabocha","butternut"],"🎃"],[["green pea","snap pea","snow pea","sweet pea"],"🫛"],
   [["garlic"],"🧄"],[["onion"],"🧅"],[["ginger"],"🫚"],[["corn"],"🌽"],[["potato"],"🥔"],[["peanut"],"🥜"],[["sesame"],"🌰"],
   [["rice noodle","noodle","udon","ramen","pasta","spaghetti","lasagna","vermicelli"],"🍜"],[["rice"],"🍚"],[["oats"],"🥣"],[["bean","mung"],"🫘"],[["flour","semolina","tapioca","starch"],"🌾"],[["pan bread","loaf","bun","bread"],"🍞"],[["tortilla"],"🌮"],
   [["honey","molasses","syrup"],"🍯"],[["icing","powdered sugar","sugar"],"🍬"],
@@ -1291,6 +1295,27 @@ function autoCategory(name){
   for(const [kws,cat] of CAT_RULES){ for(const kw of kws){ if(n.includes(kw)) return cat; } }
   return "Other";
 }
+// Keyword-only category (no learned prefs) — for re-sorting existing items into the scheme.
+function autoCategoryStrict(name){
+  const n=(name||"").toLowerCase();
+  for(const [kws,cat] of CAT_RULES){ for(const kw of kws){ if(n.includes(kw)) return cat; } }
+  return null;
+}
+// Re-file every item into its best-matching EXISTING category (safe: won't invent categories).
+function autoSortAllItems(){
+  if(!requireEdit()) return;
+  const moves=[];
+  state.items.forEach(it=>{
+    const best=autoCategoryStrict(it.name);
+    if(best && best!==it.category && CAT_ORDER.includes(best)) moves.push([it,best]);
+  });
+  if(!moves.length){ toast("Everything already sits in a matching category 👍","good"); return; }
+  if(!confirm("Auto-sort "+moves.length+" item(s) into their best-matching category?\n\nYou can undo this from Backup & data.")) return;
+  safetySnapshot("auto-sort");
+  moves.forEach(([it,cat])=>{ it.category=cat; });
+  save(); rebuildCats(); renderCatList(); renderAll();
+  toast("✅ Re-sorted "+moves.length+" item(s)","good");
+}
 
 /* ---------- Freshness database: days of good quality after OPENING (or after buying, for fresh produce/meat) ----------
    Values based on USDA FoodKeeper / StillTasty guidance. Longest-matching, most-specific keywords are listed first. */
@@ -1375,7 +1400,8 @@ const FRESH=[
   // --- Baking / dry pantry staples (after opening) ---
   [["baking powder"],{fridge:0,freezer:0,pantry:180}],
   [["baking soda"],{fridge:0,freezer:0,pantry:365}],
-  [["coffee","mccafe"],{fridge:30,freezer:60,pantry:21}],
+  [["ground coffee","coffee bean","coffee beans","whole bean","espresso"],{fridge:21,freezer:0,pantry:180}],
+  [["coffee","mccafe","instant coffee","coffee granule","nescafe","freeze dried coffee","freeze-dried coffee"],{fridge:0,freezer:0,pantry:730}],
   [["peanut butter powder","protein powder","whey","cocoa"],{fridge:0,freezer:0,pantry:180}],
   [["honey"],{fridge:0,freezer:0,pantry:730}],
   [["molasses","syrup","maple","corn syrup"],{fridge:365,freezer:0,pantry:365}],
@@ -2864,6 +2890,7 @@ $("#btnAddCat").addEventListener("click",()=>{
 });
 
 $("#setSort").addEventListener("change",()=>{ state.settings.sort=$("#setSort").value; save(); renderAll(); });
+$("#btnAutoSort").addEventListener("click",autoSortAllItems);
 
 /* Theme (per-device, not synced) */
 const THEME_KEY="pantry_theme";
@@ -2937,14 +2964,7 @@ importInput.addEventListener("change",()=>{
 $("#btnShowDanger").addEventListener("click",()=>{
   const b=$("#dangerBox"); b.style.display = b.style.display==="none" ? "" : "none";
 });
-$("#btnReset").addEventListener("click",()=>{
-  if(!confirm("Erase everything and re-seed the starter pantry?")) return;
-  safetySnapshot("reset");   // so a reset can be undone from Backup & data
-  [KEY, KEY+"_seeded", KEY+"_gro_v1", KEY+"_cat_v2", "voice_hint"].forEach(k=>localStorage.removeItem(k));
-  state={items:[],notes:[],settings:{sort:"category"}};
-  load(); renderCatList(); renderAll();
-  toast("Reset complete","good");
-});
+/* Reset removed — the Danger zone now holds the permanent-delete action instead. */
 
 /* ============================================================
    INIT
@@ -3137,6 +3157,7 @@ if(window.CLOUD){
     $("#cloudSettings").style.display="";
     $("#cloudPantryName").textContent=curData.name||"Pantry";
     $("#pantryCode").textContent=curId;
+    { const mu=$("#myUid"); if(mu) mu.textContent=uid; }
     $("#lockRow").style.display=owner?"flex":"none";
     $("#lockToggle").checked=!!curData.locked;
     { const dp=$("#btnDeletePantry"), dh=$("#deletePantryHint"); if(dp){ dp.style.display=owner?"":"none"; } if(dh){ dh.style.display=owner?"":"none"; } }
@@ -3188,6 +3209,10 @@ if(window.CLOUD){
       toast("🗑️ Pantry permanently deleted","good");
       backToList();
     }catch(e){ toast("Delete failed: "+(e&&e.code||"error"),"bad"); }
+  });
+  $("#btnCopyUid").addEventListener("click",async()=>{
+    try{ await navigator.clipboard.writeText(uid); toast("Account ID copied","good"); }
+    catch(e){ toast("Couldn't copy — long-press the ID to select it","warn"); }
   });
 
   /* ---------- helpers ---------- */
