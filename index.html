@@ -487,7 +487,8 @@ body.viewonly .vobadge{display:block}
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
-      <div class="setrow" style="margin-bottom:10px"><span id="cloudPantryName" style="font-weight:800">—</span><button class="chip" id="btnSwitchPantry" style="flex:0 0 auto">Switch</button></div>
+      <div class="setrow" style="margin-bottom:6px"><span id="cloudPantryName" style="font-weight:800">—</span><button class="chip" id="btnSwitchPantry" style="flex:0 0 auto">Switch</button></div>
+      <div id="roleTag" style="font-size:13px;font-weight:700;margin-bottom:10px"></div>
       <div id="shareArea">
         <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px">Share this pantry</label>
         <div class="sub-hint" style="margin:0 0 8px">Send someone this code. They open the app, tap “Join with a code,” and they’re in — no sign-up.</div>
@@ -3158,6 +3159,7 @@ if(window.CLOUD){
     $("#cloudPantryName").textContent=curData.name||"Pantry";
     $("#pantryCode").textContent=curId;
     { const mu=$("#myUid"); if(mu) mu.textContent=uid; }
+    { const rt=$("#roleTag"); if(rt) rt.textContent = owner ? "👑 You own this pantry" : (curData.locked ? "👁️ Editor — view-only (owner locked it)" : "✏️ You're an editor (not the owner)"); }
     $("#lockRow").style.display=owner?"flex":"none";
     $("#lockToggle").checked=!!curData.locked;
     { const dp=$("#btnDeletePantry"), dh=$("#deletePantryHint"); if(dp){ dp.style.display=owner?"":"none"; } if(dh){ dh.style.display=owner?"":"none"; } }
