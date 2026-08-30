@@ -555,6 +555,7 @@ body.viewonly .vobadge{display:block}
       <div id="adminIn" style="display:none">
         <div class="sub-hint" style="margin:0 0 10px;color:var(--green-d)">✅ <b>Admin mode ON</b> — items you save that have a barcode also update the shared product database.</div>
         <button class="btn sec" id="btnAdminTest" style="width:100%;margin-bottom:8px">🧪 Test shared database connection</button>
+        <button class="btn sec" id="btnAdminPublishAll" style="width:100%;margin-bottom:8px">📤 Publish my items to the shared database</button>
         <button class="btn danger" id="btnAdminLogout" style="width:100%">🔒 Log out of admin</button>
       </div>
     </div>
@@ -3067,6 +3068,16 @@ $("#btnAdminUnlock").addEventListener("click",async()=>{
   if(h===window.ADMIN_SHA256){ try{ localStorage.setItem("pantry_admin","1"); }catch(e){} $("#adminCode").value=""; updateAdminState(); toast("✅ Admin mode unlocked","good"); }
   else toast("Wrong code","warn");
 });
+$("#btnAdminPublishAll").addEventListener("click",async()=>{
+  if(!window.Products){ alert("Not connected to the cloud database — open an online pantry first."); return; }
+  const withBc=state.items.filter(i=>i.barcode);
+  if(!withBc.length){ alert("None of your items have a stored barcode yet.\n\nScan an item's barcode (Add Item) and Save — then it can be shared."); return; }
+  if(!confirm("Publish "+withBc.length+" of your items (the ones with a barcode) to the shared database?\n\nIt shares each one's current name, category, and photo with everyone — so make sure those are correct first.")) return;
+  toast("Publishing "+withBc.length+" item(s)…","good");
+  let ok=0, fail=0;
+  for(const it of withBc){ const r=await window.Products.save(it.barcode,{name:it.name,category:it.category,photo:it.photo||null}); if(r) ok++; else fail++; }
+  alert("Done — published "+ok+" item(s)"+(fail?(", "+fail+" failed"):"")+" to the shared database.");
+});
 $("#btnAdminLogout").addEventListener("click",()=>{ try{ localStorage.removeItem("pantry_admin"); }catch(e){} updateAdminState(); toast("🔒 Logged out of admin","good"); });
 $("#btnAdminTest").addEventListener("click",async()=>{
   if(!window.Products || !window.Products.probe){ alert("❌ Not connected to the cloud database.\n\n'window.Products' is missing — this device isn't running an online pantry, or the latest code isn't deployed. Open a cloud pantry and make sure the newest index.html is live on GitHub."); return; }
@@ -3212,7 +3223,7 @@ if(window.CLOUD){
     a.push({code,name,owner:!!owner}); setList(a);
   }
   function forget(code){ setList(getList().filter(p=>p.code!==code)); }
-  function renameLocal(code,name){ const a=getList().map(p=>p.code===code?{...p,name}:p); setList(a); }
+  function renameLocal(code,name,owner){ const a=getList().map(p=>p.code===code?{...p,name,...(owner===undefined?{}:{owner:!!owner})}:p); setList(a); }
 
   /* ---------- Silent anonymous sign-in (no login screen ever) ---------- */
   onAuthStateChanged(auth,user=>{
@@ -3317,7 +3328,7 @@ if(window.CLOUD){
       document.body.classList.toggle("viewonly", role==="viewer");
       window.applyRemoteState(curData.state||{items:[],notes:[],settings:{sort:"category"}});
       window.Sync.ready=(role!=="viewer");
-      renameLocal(code, curData.name||"Pantry");
+      renameLocal(code, curData.name||"Pantry", owner);
       updateSettingsUI();
       overlay.classList.remove("on");
     },err=>{ toast("Sync error: "+err.code,"bad"); showHub(); });
