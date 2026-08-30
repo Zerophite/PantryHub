@@ -259,6 +259,8 @@ body.viewonly .cathead .catadd{display:none}
 #toast{position:fixed;left:50%;bottom:calc(150px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:92%;max-width:420px}
 .toast{background:#20241f;color:#fff;padding:12px 16px;border-radius:12px;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.3);opacity:0;transform:translateY(10px);transition:.25s;display:flex;align-items:center;gap:10px;width:100%}
 .toast.show{opacity:1;transform:translateY(0)}
+.toast .tundo{pointer-events:auto;background:rgba(255,255,255,.22);color:#fff;border:none;border-radius:9px;padding:7px 14px;font-weight:800;font-size:13px;margin-left:auto;cursor:pointer}
+.toast .tundo:active{background:rgba(255,255,255,.35)}
 .toast.good{background:#2e7d32}
 .toast.warn{background:#ef6c00}
 .toast.bad{background:#c62828}
@@ -566,10 +568,8 @@ body.viewonly .vobadge{display:block}
       <div class="setlabel">Admin</div>
       <div id="adminOut">
         <div class="sub-hint" style="margin:0 0 8px">Enter the admin code to contribute missing products to the shared database (everyone benefits).</div>
-        <div class="btnrow">
-          <input id="adminCode" type="password" placeholder="Admin code" autocomplete="off" style="flex:1">
-          <button class="btn sec" id="btnAdminUnlock" style="flex:0 0 auto">Unlock</button>
-        </div>
+        <input id="adminCode" type="password" placeholder="Admin code" autocomplete="off" style="width:100%;margin-bottom:8px">
+        <button class="btn" id="btnAdminUnlock" style="width:100%">🔓 Unlock admin</button>
       </div>
       <div id="adminIn" style="display:none">
         <div class="sub-hint" style="margin:0 0 10px;color:var(--green-d)">✅ <b>Admin mode ON</b> — items you save that have a barcode also update the shared product database.</div>
@@ -2590,7 +2590,7 @@ async function lookupBarcode(code){
     if(j.status===1 && j.product && (j.product.product_name||j.product.brands)){
       const p=j.product;
       const nm=[p.brands?p.brands.split(",")[0]:"",p.product_name].filter(Boolean).join(" ").trim() || ("Product "+code);
-      applyBarcodeResult(nm, guessCatFromOFF(p.categories_tags), p.image_front_small_url);
+      applyBarcodeResult(nm, null, p.image_front_small_url);
       rememberProduct(code,{name:nm, category:$("#fCat").value, photo:p.image_front_small_url||null});
       return;
     }
@@ -2619,7 +2619,9 @@ function applyBarcodeResult(nm, catGuess, imgUrl){
   const dupN=sameNameItem(nm);
   if(dupN && dupN.id!==editingId && !backupForId){ offerDuplicate(dupN); return; }
   $("#fName").value=nm;
-  const cat=(catGuess && CAT_ORDER.includes(catGuess)) ? catGuess : autoCategory(nm);
+  let cat;
+  if(catGuess){ if(!CAT_ORDER.includes(catGuess)){ ensureCat(catGuess); rebuildCats(); renderCatList(); populateCatSelect(); } cat=catGuess; }
+  else cat=autoCategory(nm);
   $("#fCat").value=CAT_ORDER.includes(cat)?cat:"Other";
   $("#autoCatTag").textContent=" → auto: "+$("#fCat").value;
   if(imgUrl){ pendingPhoto=imgUrl; showPhoto(pendingPhoto); }
@@ -3033,13 +3035,12 @@ function toast(msg,kind){
 }
 window.__toast=toast;
 document.addEventListener("click",e=>{ if(e.target.closest && e.target.closest("#btnGrocScan")){ scanTarget="grocery"; openCamera("barcode"); } });
-// A toast you can tap to undo the action that raised it.
-let _undoFn=null;
+// A toast with a real Undo button (the toast layer itself is click-through; only the button catches taps).
 function toastUndo(msg,kind,undoFn){
-  _undoFn=undoFn;
-  toast(msg+' <span style="text-decoration:underline;margin-left:8px;font-weight:800">Tap to undo</span>',kind);
+  toast(msg+' <button class="tundo" type="button">Undo</button>',kind);
   const host=$("#toast"), el=host&&host.lastElementChild;
-  if(el){ el.style.cursor="pointer"; el.addEventListener("click",()=>{ const f=_undoFn; _undoFn=null; if(f) f(); el.classList.remove("show"); setTimeout(()=>el.remove(),300); }); }
+  const btn=el&&el.querySelector(".tundo");
+  if(btn){ btn.addEventListener("click",(e)=>{ e.preventDefault(); e.stopPropagation(); if(undoFn) undoFn(); if(el){ el.classList.remove("show"); setTimeout(()=>el.remove(),250); } }); }
 }
 
 /* ============================================================
@@ -3108,6 +3109,7 @@ function openSettings(){ renderCatList(); $("#setSort").value=(state.settings.so
 
 function renderCatList(){
   const host=$("#catList");
+  const admin=isAdmin();
   host.innerHTML=state.cats.map((c,i)=>{
     const count=state.items.filter(it=>it.category===c.name).length;
     return `<div class="catrow" data-i="${i}">
@@ -3116,8 +3118,8 @@ function renderCatList(){
       <span class="cnt">${count}</span>
       <button data-cup="${i}" title="Up">▲</button>
       <button data-cdown="${i}" title="Down">▼</button>
-      <button data-crename="${i}" title="Rename">✏️</button>
-      <button class="cdel" data-cdelete="${i}" title="Delete">🗑️</button>
+      ${admin?`<button data-crename="${i}" title="Rename">✏️</button>
+      <button class="cdel" data-cdelete="${i}" title="Delete">🗑️</button>`:""}
     </div>`;
   }).join("");
 }
@@ -3128,6 +3130,7 @@ $("#catList").addEventListener("click",e=>{
   const ren=e.target.closest("[data-crename]"), del=e.target.closest("[data-cdelete]");
   if(up){ const i=+up.dataset.cup; if(i>0){ [state.cats[i-1],state.cats[i]]=[state.cats[i],state.cats[i-1]]; catsChanged(); } return; }
   if(down){ const i=+down.dataset.cdown; if(i<state.cats.length-1){ [state.cats[i+1],state.cats[i]]=[state.cats[i],state.cats[i+1]]; catsChanged(); } return; }
+  if((ren||del) && !isAdmin()){ toast("Only an admin can rename or remove categories","warn"); return; }
   if(ren){ const i=+ren.dataset.crename; const c=state.cats[i];
     const nn=prompt("Rename category:",c.name); if(nn===null) return; const name=nn.trim(); if(!name) return;
     if(state.cats.some((x,j)=>j!==i && x.name.toLowerCase()===name.toLowerCase())){ toast("A category with that name exists","warn"); return; }
@@ -3159,14 +3162,14 @@ $("#btnAddCat").addEventListener("click",()=>{
 
 $("#setSort").addEventListener("change",()=>{ state.settings.sort=$("#setSort").value; save(); renderAll(); });
 $("#btnAutoSort").addEventListener("click",autoSortAllItems);
-function isAdmin(){ try{ return localStorage.getItem("pantry_admin")==="1"; }catch(e){ return false; } }
+function isAdmin(){ try{ const v=localStorage.getItem("pantry_admin"); return !!v && v===(window.CURRENT_PANTRY||"local"); }catch(e){ return false; } }
 async function sha256hex(str){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
 function updateAdminState(){ const inn=$("#adminIn"), out=$("#adminOut"); if(!inn||!out) return; const a=isAdmin(); inn.style.display=a?"":"none"; out.style.display=a?"none":""; }
 $("#btnAdminUnlock").addEventListener("click",async()=>{
   const code=($("#adminCode").value||""); if(!code){ toast("Enter the admin code","warn"); return; }
   if(!window.ADMIN_SHA256){ toast("Admin code isn't set up yet","warn"); return; }
   const h=await sha256hex(code);
-  if(h===window.ADMIN_SHA256){ try{ localStorage.setItem("pantry_admin","1"); }catch(e){} $("#adminCode").value=""; updateAdminState(); toast("✅ Admin mode unlocked","good"); }
+  if(h===window.ADMIN_SHA256){ try{ localStorage.setItem("pantry_admin", window.CURRENT_PANTRY||"local"); }catch(e){} $("#adminCode").value=""; updateAdminState(); toast("✅ Admin mode unlocked for this pantry","good"); }
   else toast("Wrong code","warn");
 });
 $("#btnAdminPublishAll").addEventListener("click",async()=>{
@@ -3417,7 +3420,7 @@ if(window.CLOUD){
   /* ---------- Open + live-sync ---------- */
   function openPantry(code){
     if(docUnsub) docUnsub();
-    curId=code;
+    curId=code; window.CURRENT_PANTRY=code;
     try{ localStorage.setItem(LAST, code); }catch(e){}
     docUnsub=onSnapshot(doc(db,"pantries",code),{includeMetadataChanges:true},snap=>{
       if(!snap.exists()){ toast("This pantry was deleted","warn"); forget(code); backToList(); return; }
@@ -3434,7 +3437,7 @@ if(window.CLOUD){
       overlay.classList.remove("on");
     },err=>{ toast("Sync error: "+err.code,"bad"); showHub(); });
   }
-  function backToList(){ flushNow(); if(docUnsub){docUnsub();docUnsub=null;} curId=null; curData=null; window.Sync.ready=false; renderList(); showHub(); overlay.classList.add("on"); }
+  function backToList(){ flushNow(); if(docUnsub){docUnsub();docUnsub=null;} curId=null; curData=null; window.CURRENT_PANTRY=null; window.Sync.ready=false; renderList(); showHub(); overlay.classList.add("on"); }
   $("#btnSwitchPantry").addEventListener("click",()=>{ $("#settingsScrim").classList.remove("on"); backToList(); });
 
   /* ---------- Debounced push ---------- */
@@ -3465,7 +3468,7 @@ if(window.CLOUD){
     $("#cloudPantryName").textContent=curData.name||"Pantry";
     $("#pantryCode").textContent=curId;
     { const mu=$("#myUid"); if(mu) mu.textContent=uid; }
-    { const rt=$("#roleTag"); if(rt) rt.textContent = owner ? "👑 You own this pantry" : (curData.locked ? "👁️ Editor — view-only (owner locked it)" : "✏️ You're an editor (not the owner)"); }
+    { const rt=$("#roleTag"); if(rt) rt.textContent = owner ? "🔑 You own this pantry" : (curData.locked ? "👁️ Editor — view-only (owner locked it)" : "✏️ You're an editor (not the owner)"); }
     $("#lockRow").style.display=owner?"flex":"none";
     $("#lockToggle").checked=!!curData.locked;
     { const dp=$("#btnDeletePantry"), dh=$("#deletePantryHint"); if(dp){ dp.style.display=owner?"":"none"; } if(dh){ dh.style.display=owner?"":"none"; } }
