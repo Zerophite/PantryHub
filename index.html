@@ -234,6 +234,10 @@ body.viewonly .cathead .catadd{display:none}
 .quickscan .qs:active{transform:translateY(1px);opacity:.9}
 #cropView{width:280px;height:280px;max-width:80vw;margin:0 auto;border-radius:14px;overflow:hidden;position:relative;background:#fff;touch-action:none;cursor:grab}
 #cropView img{position:absolute;left:0;top:0;-webkit-user-drag:none;user-select:none;pointer-events:none;max-width:none}
+.qstep{display:flex;align-items:center;gap:1px;margin-bottom:6px;background:#eef2ea;border-radius:10px;padding:1px}
+.qstep button{width:28px;height:28px;border:none;background:transparent;font-size:18px;font-weight:800;color:var(--green-d);cursor:pointer;line-height:1}
+.qstep span{min-width:22px;text-align:center;font-weight:800;font-size:14px;color:var(--ink)}
+:root[data-theme="dark"] .qstep{background:#2a3a2e}
 .chip:active{background:#dce7d6}
 
 .freshbox{background:#f1f8e9;border-radius:12px;padding:12px 14px;font-size:13px;color:#33691e;line-height:1.5;margin-top:6px}
@@ -437,8 +441,17 @@ body.viewonly .vobadge{display:block}
     </div>
 
     <div class="field">
-      <label>Quantity note (optional)</label>
-      <input id="fQty" placeholder="e.g. 2 boxes · large white and blue" autocomplete="off">
+      <label>Quantity · how many you have</label>
+      <div class="rng" style="gap:14px;justify-content:flex-start">
+        <button type="button" class="chip" id="fCntMinus" style="font-size:18px;padding:6px 16px">−</button>
+        <span id="fCntVal" style="font-weight:800;font-size:19px;min-width:30px;text-align:center">1</span>
+        <button type="button" class="chip" id="fCntPlus" style="font-size:18px;padding:6px 16px">＋</button>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Description (optional)</label>
+      <input id="fQty" placeholder="e.g. large white bottle · brand" autocomplete="off">
     </div>
 
     <div class="row2">
@@ -1258,7 +1271,7 @@ function wholeSpiceSVG(name){
 }
 function itemThumb(it){
   const n=(it.name||"").toLowerCase();
-  if(it.photo) return `<img src="${it.photo}" alt="">`;
+  if(it.photo && it.photo!=="L") return `<img src="${it.photo}" alt="">`;
   if(/cheese sauce|liquid cheese|nacho cheese|cheese dip|cheese spread/.test(n)) return jarSVG("#f0a72e");
   if(/mozzarella|white cheese|string cheese/.test(n)) return cheeseWedgeSVG("#f7f3e6");
   if(/mccafe|mc cafe/.test(n)) return coffeeCanSVG();
@@ -1512,6 +1525,7 @@ function load(){
     migrateCatV2();
   }
   rebuildCats();
+  if(migrateCount()) save();
   if(_migratedThisLoad){ _migratedThisLoad=false; save(); }
 }
 
@@ -1552,9 +1566,19 @@ function save(){
   if(CLOUD && window.Sync && window.Sync.ready) window.Sync.push(state);   // debounced upload to Firestore
 }
 // Called by the sync layer when a newer version arrives from the cloud
+const PHOTOS_KEY="pantry_photos_v1";
+function getPhotoStore(){ try{ return JSON.parse(localStorage.getItem(PHOTOS_KEY)||"{}"); }catch(e){ return {}; } }
+function setLocalPhoto(id,data){ if(!id) return; const o=getPhotoStore(); if(typeof data==="string" && data.startsWith("data:")) o[id]=data; else delete o[id]; try{ localStorage.setItem(PHOTOS_KEY, JSON.stringify(o)); }catch(e){} }
 window.applyRemoteState=function(remote){
   state=Object.assign({items:[],notes:[],settings:{sort:"category"},cats:null,catPrefs:{}},remote||{});
   if(!state.catPrefs) state.catPrefs={};
+  { const ph=getPhotoStore();
+    (state.items||[]).forEach(it=>{
+      if(typeof it.photo==="string" && it.photo.startsWith("data:")) setLocalPhoto(it.id,it.photo);   // capture before it's ever stripped
+      else if((!it.photo||it.photo==="L") && ph[it.id]) it.photo=ph[it.id];                           // restore locally-kept photo
+    });
+  }
+  migrateCount();
   rebuildCats();
   try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}
   renderAll();
@@ -1690,6 +1714,8 @@ function itemMatchesSearch(it){
   return (it.name+" "+it.category+" "+(it.qty||"")).toLowerCase().includes(searchQ);
 }
 
+function itemCount(it){ return (it && it.count!=null && it.count>0) ? it.count : 1; }
+function migrateCount(){ let ch=false; (state.items||[]).forEach(it=>{ if(it.count==null){ it.count=1+((it.backups&&it.backups.length)?it.backups.length:0); ch=true; } if(it.backups){ delete it.backups; ch=true; } }); return ch; }
 function pctClass(p){ if(p==null) return ""; if(p<=25) return "low"; if(p<=60) return "mid"; return ""; }
 
 function itemCardHTML(it,mode,showCat){
@@ -1704,7 +1730,6 @@ function itemCardHTML(it,mode,showCat){
   if(mode!=="grocery" && it.opened) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
   else if(mode!=="grocery" && !it.opened && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
   if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
-  if(it.backups && it.backups.length) sub.push(`<button class="pill openpill" data-usebackup="${it.id}">🔁 Use spare (${it.backups.length})</button>`);
 
   const barHTML=(it.percent!=null)?`<div class="bar ${pctClass(it.percent)}"><i style="width:${it.percent}%"></i></div>`:"";
 
@@ -1726,7 +1751,10 @@ function itemCardHTML(it,mode,showCat){
       <div class="sub">${sub.join("")}</div>
       ${barHTML}
     </div>
-    <div class="act"><button class="moveBtn togro" data-move="${it.id}" title="Need to buy">🛒</button></div>
+    <div class="act">
+      <div class="qstep"><button data-dec="${it.id}" title="Use one">−</button><span>${itemCount(it)}</span><button data-inc="${it.id}" title="Add one">+</button></div>
+      <button class="moveBtn togro" data-move="${it.id}" title="Need to buy">🛒</button>
+    </div>
   </div>`;
 }
 
@@ -1889,8 +1917,10 @@ document.addEventListener("click",e=>{
   if(openb){ markOpened(openb.dataset.open); return; }
   const nb=e.target.closest("[data-newbatch]");
   if(nb){ newBatch(nb.dataset.newbatch); return; }
-  const ub=e.target.closest("[data-usebackup]");
-  if(ub){ useBackup(ub.dataset.usebackup); return; }
+  const incb=e.target.closest("[data-inc]");
+  if(incb){ incCount(incb.dataset.inc); return; }
+  const decb=e.target.closest("[data-dec]");
+  if(decb){ decCount(decb.dataset.dec); return; }
   const unopenb=e.target.closest("[data-unopen]");
   if(unopenb){ markUnopened(unopenb.dataset.unopen); return; }
   const move=e.target.closest("[data-move]");
@@ -1930,27 +1960,18 @@ function newBatch(id){
   save(); renderAll();
   toast(`🔄 New batch — “${it.name}” is fresh & unopened again`,"good");
 }
-function useBackup(id){
-  if(!requireEdit()) return;
-  const it=getItem(id); if(!it||!it.backups||!it.backups.length) return;
-  const b=it.backups.shift();
-  const prev={location:it.location,percent:it.percent,opened:it.opened,exp:it.exp,checked:it.checked};
-  it.location="pantry"; it.checked=false; it.percent=100; it.opened=null; it.exp=b.exp||null;
-  save(); renderAll();
-  toastUndo("🔁 Using a spare of “"+it.name+"” — "+it.backups.length+" left","good",()=>{ it.backups.unshift(b); Object.assign(it,prev); save(); renderAll(); });
-}
+function incCount(id){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; it.count=itemCount(it)+1; save(); renderAll(); }
+function decCount(id){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; const c=itemCount(it);
+  if(c>1){ it.count=c-1; save(); renderAll(); }
+  else { if(confirm("That's your last “"+it.name+"”. Move it to the grocery list?")) moveItem(id); } }
 function moveItem(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
-  if(it.location==="pantry" && it.backups && it.backups.length){
-    if(confirm("You've got "+it.backups.length+" spare “"+it.name+"” in reserve.\n\nUse a spare now instead of putting this on your grocery list? It'll refill to full with the spare's own expiry date.\n\nOK — use a spare\nCancel — add to grocery anyway")){
-      const b=it.backups.shift();
-      const bp={percent:it.percent,opened:it.opened,exp:it.exp};
-      it.percent=100; it.opened=null; it.exp=b.exp||null;
-      save(); renderAll();
-      toastUndo("🔁 Backup used for “"+it.name+"” — "+it.backups.length+" left","good",()=>{ it.backups.unshift(b); Object.assign(it,bp); save(); renderAll(); });
-      return;
-    }
+  if(it.location==="pantry"){
+    const cnt=itemCount(it);
+    if(cnt>1 && !confirm("You still have ×"+cnt+" “"+it.name+"” in stock.\n\nAdd to the grocery list anyway?")) return;
+    const others=state.items.filter(i=>i.id!==it.id && i.location==="pantry" && normName(i.name)===normName(it.name));
+    if(others.length && !confirm("You still have "+others.length+" other “"+it.name+"” in your pantry.\n\nMove THIS one to the grocery list anyway?")) return;
   }
   const prev={location:it.location,exp:it.exp,opened:it.opened,percent:it.percent,checked:it.checked};
   it.location = it.location==="pantry" ? "grocery" : "pantry";
@@ -2041,6 +2062,7 @@ function openItemSheet(id){
   $("#chipOpenToday").textContent = (it&&it.opened) ? "✕ Mark unopened" : "📂 Opened today";
   $("#fPct").value=it&&it.percent!=null?it.percent:100;
   $("#fQty").value=it?it.qty:"";
+  $("#fCntVal").textContent=it?itemCount(it):1;
   $("#fExp").value=it?(it.exp||""):"";
   $("#fOpen").value=it?(it.opened||""):"";
   $("#fVac").checked=!!(it&&it.vac);
@@ -2137,6 +2159,8 @@ function updateFreshInfo(){
   else { box.className=""; box.innerHTML=""; }
 }
 
+$("#fCntMinus").addEventListener("click",()=>{ $("#fCntVal").textContent=Math.max(1,(parseInt($("#fCntVal").textContent,10)||1)-1); });
+$("#fCntPlus").addEventListener("click",()=>{ $("#fCntVal").textContent=(parseInt($("#fCntVal").textContent,10)||1)+1; });
 $("#btnSaveItem").addEventListener("click",()=>{
   if(!requireEdit()) return;
   const name=$("#fName").value.trim();
@@ -2144,7 +2168,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
   const data={
     name, category:$("#fCat").value,
     percent: parseInt($("#fPct").value,10),
-    qty:$("#fQty").value.trim(), exp:$("#fExp").value||null, opened:$("#fOpen").value||null,
+    qty:$("#fQty").value.trim(), count:Math.max(1,parseInt($("#fCntVal").textContent,10)||1), exp:$("#fExp").value||null, opened:$("#fOpen").value||null,
     store:storeVal, vac:$("#fVac").checked, note:$("#fNote").value.trim(), photo:pendingPhoto||null,
   };
   if(backupForId){
@@ -2171,6 +2195,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
   }
   if(!bc && isAdmin()) toast("ℹ️ No barcode on this item — scan its barcode (Add Item) so it can be shared","warn");
   if(ensureCat(data.category)){ rebuildCats(); renderCatList(); }   // auto-create the category if it's new
+  { const _t = editingId ? getItem(editingId) : state.items[state.items.length-1]; if(_t && typeof _t.photo==="string" && _t.photo.startsWith("data:")) setLocalPhoto(_t.id,_t.photo); }
   learnCat(data.name, data.category); lastCat=data.category;        // remember the user's own preference
   save(); renderAll(); closeItemSheet();
 });
@@ -2220,26 +2245,17 @@ function sameNameItem(nm){ const t=normName(nm); return t?state.items.find(i=>no
 // Same product already here -> offer to keep it as a backup batch (or open the existing one).
 function offerDuplicate(existing){
   if(typeof closeCamera==="function") closeCamera();
-  const code=pendingBarcode;   // the barcode we just scanned (attach it to whichever item we save)
+  const code=pendingBarcode;
   const where=existing.location==="grocery"?"grocery list":"pantry";
-  // First choice: update the existing item (and attach this barcode so it can be shared).
-  if(confirm("“"+existing.name+"” is already in your "+where+".\n\nOpen it to update — change the photo, name, or category, and attach this barcode so it can be shared?\n\nOK — open & update\nCancel — no, it's a separate/extra one")){
+  if(confirm("You already have “"+existing.name+"” in your "+where+" (×"+itemCount(existing)+").\n\nOK — add one more (×"+(itemCount(existing)+1)+")\nCancel — open it to edit / update instead")){
+    existing.count=itemCount(existing)+1;
+    if(code && !existing.barcode) existing.barcode=code;
+    save(); renderAll();
+    toast("✓ “"+existing.name+"” is now ×"+existing.count,"good");
+  } else {
     openItemSheet(existing.id);
-    if(code){ pendingBarcode=code; $("#fBarcode").value=code; }   // save will attach it to this item
+    if(code){ pendingBarcode=code; $("#fBarcode").value=code; }
     toast("Editing “"+existing.name+"” — make your changes, then Save","good");
-    return;
-  }
-  // Second choice: keep it as a spare in reserve.
-  if(confirm("Add “"+existing.name+"” as an extra SPARE stock instead?\n\nIt waits in reserve with its own expiry and takes over automatically when you run out.\n\nOK — add a spare\nCancel — do nothing")){
-    openItemSheet();
-    backupForId=existing.id;
-    $("#fName").value=existing.name;
-    setCatSelect(existing.category);
-    if(existing.photo){ pendingPhoto=existing.photo; showPhoto(pendingPhoto); }
-    pendingBarcode=code||existing.barcode||null;
-    $("#itemSheetTitle").textContent="Add a spare";
-    $("#autoCatTag").textContent="";
-    toast("Set or scan the expiry for this spare, then Save","good");
   }
 }
 // Remembered products, keyed by barcode: {name, category, photo}. Local to this device.
@@ -3548,7 +3564,7 @@ if(window.CLOUD){
   });
 
   /* ---------- helpers ---------- */
-  function clean(o){ try{ return JSON.parse(JSON.stringify(o||{})); }catch(e){ return {}; } }
+  function clean(o){ try{ const c=JSON.parse(JSON.stringify(o||{})); if(Array.isArray(c.items)) c.items.forEach(it=>{ if(typeof it.photo==="string" && it.photo.startsWith("data:")) it.photo="L"; }); return c; }catch(e){ return {}; } }
   function esc(s){ return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function toast(m,k){ if(window.__toast) window.__toast(m,k); }
  }catch(err){
