@@ -3069,13 +3069,16 @@ $("#btnAdminUnlock").addEventListener("click",async()=>{
 });
 $("#btnAdminLogout").addEventListener("click",()=>{ try{ localStorage.removeItem("pantry_admin"); }catch(e){} updateAdminState(); toast("🔒 Logged out of admin","good"); });
 $("#btnAdminTest").addEventListener("click",async()=>{
-  if(!window.Products){ alert("❌ Not connected to the cloud database.\n\n'window.Products' is missing — this device isn't running an online pantry, or the latest code isn't deployed. Open a cloud pantry and make sure the newest index.html is live on GitHub."); return; }
+  if(!window.Products || !window.Products.probe){ alert("❌ Not connected to the cloud database.\n\n'window.Products' is missing — this device isn't running an online pantry, or the latest code isn't deployed. Open a cloud pantry and make sure the newest index.html is live on GitHub."); return; }
   toast("Testing shared database…","good");
-  const ok=await window.Products.save("__pantryhub_test__",{name:"test",category:"",photo:""});
-  if(!ok){ alert("❌ WRITE FAILED.\n\nThe shared 'products' Firestore rule is almost certainly missing. In Firebase → Firestore → Rules, add inside your documents block:\n\nmatch /products/{code} {\n  allow read: if true;\n  allow write: if request.auth != null;\n}\n\nthen Publish."); return; }
-  const back=await window.Products.get("__pantryhub_test__");
-  if(back && back.name==="test") alert("✅ Shared database works — writes and reads both go through.\n\nAdmin photo/name changes on items that HAVE a barcode will now reach everyone. (Items with no barcode can't be shared — scan the barcode first.)");
-  else alert("⚠️ The write worked but the read did not — check the 'allow read: if true;' line in your products rule.");
+  const r=await window.Products.probe();
+  if(r.ok){ alert("✅ Shared database works — writes go through.\n\nAdmin changes on items that HAVE a barcode will now reach everyone. (No barcode = can't be shared; scan it first.)"); return; }
+  const auth = r.uid ? ("signed in ✓ ("+String(r.uid).slice(0,8)+"…)") : "NOT signed in ✗";
+  let hint;
+  if(/permission|insufficient/i.test(r.error||"")) hint="→ The products rule isn't live yet. In Firestore → Rules, make sure the products block is there, click PUBLISH, then wait ~1 minute and test again. (Editing without Publishing does nothing.)";
+  else if(/unauth/i.test(r.error||"") || !r.uid) hint="→ The app isn't authenticated. Reopen the cloud pantry so it signs in, then retry.";
+  else hint="→ Unexpected error — send me this exact text.";
+  alert("❌ WRITE FAILED\n\nError: "+r.error+"\nAuth: "+auth+"\n\n"+hint);
 });
 
 /* Theme (per-device, not synced) */
@@ -3328,7 +3331,8 @@ if(window.CLOUD){
   // Shared product database (keyed by barcode) — read by everyone, written by admins.
   window.Products={
     async get(code){ try{ const snap=await getDoc(doc(db,"products",String(code))); return snap.exists()?snap.data():null; }catch(e){ return null; } },
-    async save(code,info){ try{ await setDoc(doc(db,"products",String(code)),{name:info.name||"",category:info.category||"",photo:info.photo||"",updatedAt:serverTimestamp()},{merge:true}); return true; }catch(e){ return false; } }
+    async save(code,info){ try{ await setDoc(doc(db,"products",String(code)),{name:info.name||"",category:info.category||"",photo:info.photo||"",updatedAt:serverTimestamp()},{merge:true}); return true; }catch(e){ return false; } },
+    async probe(){ try{ await setDoc(doc(db,"products","__pantryhub_test__"),{name:"test",updatedAt:serverTimestamp()},{merge:true}); return {ok:true, uid:uid}; }catch(e){ return {ok:false, error:(e&&e.code)||(e&&e.message)||String(e), uid:uid}; } }
   };
   async function flush(){
     if(!curId || !window.Sync.ready || !dirty) return;
