@@ -382,14 +382,14 @@ body.viewonly .vobadge{display:block}
     <h2 id="itemSheetTitle">Add Item</h2>
     <div class="quickscan">
       <button class="qs" id="qsBarcode">📷 Scan barcode</button>
-      <button class="qs" id="qsDate">📅 Scan expiry date</button>
+      <button class="qs" id="qsDate">🗓️ Scan expiry date</button>
     </div>
 
     <div class="photobox" id="photoBox">
       <img class="pv" id="photoPreview" alt="">
       <div id="photoHint">📷 No photo yet</div>
       <div class="chipbtns">
-        <button class="chip" id="chipFindImg">🔎 Find image by name</button>
+        <button class="chip" id="chipGoogleImg" style="display:none">🔎 Search Google Images</button>
         <button class="chip" id="chipPhoto">🖼️ Add your own photo</button>
       </div>
     </div>
@@ -2031,6 +2031,8 @@ function openItemSheet(id){
   $("#editExtraBtns").style.display=it?"flex":"none";
   $("#btnMoveItem").textContent = it&&it.location==="pantry" ? "Move to Grocery" : "Move to Pantry";
   updateFreshInfo();
+  { const g=$("#chipGoogleImg"); if(g) g.style.display=isAdmin()?"":"none"; }
+  try{ $("#itemSheet").scrollTop=0; }catch(e){}
   itemScrim.classList.add("on");
 }
 function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; backupForId=null; }
@@ -2318,7 +2320,11 @@ $("#camCancel2").addEventListener("click",closeCamera);
 
 $("#qsBarcode").addEventListener("click",()=>{ scanTarget="pantry"; openCamera("barcode"); });
 $("#qsDate").addEventListener("click",()=>openCamera("date"));
-$("#chipFindImg").addEventListener("click",findImageByName);
+$("#chipGoogleImg").addEventListener("click",()=>{
+  const q=$("#fName").value.trim(); if(!q){ toast("Type the item name first","warn"); return; }
+  window.open("https://www.google.com/search?tbm=isch&q="+encodeURIComponent(q),"_blank");
+  toast("Find an image, save it to your phone, then tap “Add your own photo”","good");
+});
 
 
 // Barcode scanning: native BarcodeDetector where available (Android Chrome),
@@ -2532,7 +2538,7 @@ function applyBarcodeResult(nm, catGuess, imgUrl){
   const dupN=sameNameItem(nm);
   if(dupN && dupN.id!==editingId && !backupForId){ offerDuplicate(dupN); return; }
   $("#fName").value=nm;
-  const cat=autoCategory(nm);
+  const cat=(catGuess && CAT_ORDER.includes(catGuess)) ? catGuess : autoCategory(nm);
   $("#fCat").value=CAT_ORDER.includes(cat)?cat:"Other";
   $("#autoCatTag").textContent=" → auto: "+$("#fCat").value;
   if(imgUrl){ pendingPhoto=imgUrl; showPhoto(pendingPhoto); }
