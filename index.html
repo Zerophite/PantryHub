@@ -232,7 +232,7 @@ body.viewonly .cathead .catadd{display:none}
 .quickscan{display:flex;gap:10px;margin:4px 0 14px}
 .quickscan .qs{flex:1;padding:14px 8px;border-radius:14px;border:none;background:var(--green);color:#fff;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 .quickscan .qs:active{transform:translateY(1px);opacity:.9}
-#cropView{width:280px;height:280px;max-width:80vw;margin:0 auto;border-radius:14px;overflow:hidden;position:relative;background:#000;touch-action:none;cursor:grab}
+#cropView{width:280px;height:280px;max-width:80vw;margin:0 auto;border-radius:14px;overflow:hidden;position:relative;background:#fff;touch-action:none;cursor:grab}
 #cropView img{position:absolute;left:0;top:0;-webkit-user-drag:none;user-select:none;pointer-events:none;max-width:none}
 .chip:active{background:#dce7d6}
 
@@ -532,15 +532,15 @@ body.viewonly .vobadge{display:block}
 
     <div class="setblock">
       <div class="setlabel">Categories</div>
-      <div class="sub-hint" style="margin:0 0 8px">Items auto-sort into these. Drag order with ▲▼, tap ✏️ to rename, ✕ to delete (its items move to “Other”).</div>
+      <div class="sub-hint" style="margin:0 0 8px">Items are filed here automatically. Reorder with ▲▼. Adding, renaming, and removing categories is reserved for admins.</div>
       <div id="catList"></div>
-      <div class="addcat">
+      <div class="addcat" id="addCatRow">
         <input id="newCatIcon" maxlength="2" placeholder="auto" title="Leave blank to auto-pick an icon" style="flex:0 0 52px;text-align:center">
         <input id="newCatName" placeholder="New category name">
         <button class="chip" id="btnAddCat" style="flex:0 0 auto">＋ Add</button>
       </div>
       <button class="btn sec" id="btnAutoSort" style="margin-top:10px">🔄 Auto-sort items into categories</button>
-      <div class="sub-hint" style="margin:6px 0 0">Re-files every item into its best-matching category (by name). Only moves items into categories you already have. Undoable from Backup &amp; data.</div>
+      <div class="sub-hint" style="margin:6px 0 0">Re-files each item into its best-matching category by name, using only categories that already exist. Reversible under Backup &amp; data.</div>
     </div>
 
     <div class="setblock">
@@ -567,12 +567,12 @@ body.viewonly .vobadge{display:block}
     <div class="setblock" id="adminBlock" style="display:none">
       <div class="setlabel">Admin</div>
       <div id="adminOut">
-        <div class="sub-hint" style="margin:0 0 8px">Enter the admin code to contribute missing products to the shared database (everyone benefits).</div>
+        <div class="sub-hint" style="margin:0 0 8px">Unlock admin access with your code to manage the shared product database.</div>
         <input id="adminCode" type="password" placeholder="Admin code" autocomplete="off" style="width:100%;margin-bottom:8px">
         <button class="btn" id="btnAdminUnlock" style="width:100%">🔓 Unlock admin</button>
       </div>
       <div id="adminIn" style="display:none">
-        <div class="sub-hint" style="margin:0 0 10px;color:var(--green-d)">✅ <b>Admin mode ON</b> — items you save that have a barcode also update the shared product database.</div>
+        <div class="sub-hint" style="margin:0 0 10px;color:var(--green-d)">✅ <b>Admin mode active.</b> Items you save that have a barcode are added to the shared product database.</div>
         <button class="btn sec" id="btnAdminTest" style="width:100%;margin-bottom:8px">🧪 Test shared database connection</button>
         <button class="btn sec" id="btnAdminPublishAll" style="width:100%;margin-bottom:8px">📤 Publish my items to the shared database</button>
         <button class="btn danger" id="btnAdminLogout" style="width:100%">🔒 Log out of admin</button>
@@ -2214,14 +2214,23 @@ function sameNameItem(nm){ const t=normName(nm); return t?state.items.find(i=>no
 // Same product already here -> offer to keep it as a backup batch (or open the existing one).
 function offerDuplicate(existing){
   if(typeof closeCamera==="function") closeCamera();
+  const code=pendingBarcode;   // the barcode we just scanned (attach it to whichever item we save)
   const where=existing.location==="grocery"?"grocery list":"pantry";
-  if(confirm("You already have “"+existing.name+"” in your "+where+".\n\nWant to keep this one as a spare? It waits in reserve with its own expiry date, and takes over automatically when you run out.\n\nOK — keep it as a spare\nCancel — never mind")){
+  // First choice: update the existing item (and attach this barcode so it can be shared).
+  if(confirm("“"+existing.name+"” is already in your "+where+".\n\nOpen it to update — change the photo, name, or category, and attach this barcode so it can be shared?\n\nOK — open & update\nCancel — no, it's a separate/extra one")){
+    openItemSheet(existing.id);
+    if(code) pendingBarcode=code;   // save will attach it to this item
+    toast("Editing “"+existing.name+"” — make your changes, then Save","good");
+    return;
+  }
+  // Second choice: keep it as a spare in reserve.
+  if(confirm("Add “"+existing.name+"” as an extra SPARE stock instead?\n\nIt waits in reserve with its own expiry and takes over automatically when you run out.\n\nOK — add a spare\nCancel — do nothing")){
     openItemSheet();
     backupForId=existing.id;
     $("#fName").value=existing.name;
     setCatSelect(existing.category);
     if(existing.photo){ pendingPhoto=existing.photo; showPhoto(pendingPhoto); }
-    pendingBarcode=existing.barcode||null;
+    pendingBarcode=code||existing.barcode||null;
     $("#itemSheetTitle").textContent="Add a spare";
     $("#autoCatTag").textContent="";
     toast("Set or scan the expiry for this spare, then Save","good");
@@ -2248,7 +2257,8 @@ function toThumb(imgOrCanvas,max=360,q=0.62){
   const h=imgOrCanvas.videoHeight||imgOrCanvas.naturalHeight||imgOrCanvas.height;
   const scale=Math.min(1,max/Math.max(w,h));
   c.width=Math.round(w*scale); c.height=Math.round(h*scale);
-  c.getContext("2d").drawImage(imgOrCanvas,0,0,c.width,c.height);
+  const _x=c.getContext("2d"); _x.fillStyle="#ffffff"; _x.fillRect(0,0,c.width,c.height);
+  _x.drawImage(imgOrCanvas,0,0,c.width,c.height);
   return c.toDataURL("image/jpeg",q);
 }
 
@@ -2353,9 +2363,10 @@ function openCropper(url, onDone){
   img.onload=()=>{
     const VP=view.clientWidth||280;
     const nw=img.naturalWidth||1, nh=img.naturalHeight||1;
-    const base=Math.max(VP/nw, VP/nh);
-    cropState={VP,nw,nh,base,zoom:1,tx:0,ty:0};
-    $("#cropZoom").value=1;
+    const base=Math.max(VP/nw, VP/nh);              // cover (fills the square)
+    const minZoom=Math.min(VP/nw, VP/nh)/base;      // zoom-out limit: the whole image fits
+    cropState={VP,nw,nh,base,zoom:1,tx:0,ty:0,minZoom};
+    const z=$("#cropZoom"); z.min=Math.min(1,minZoom).toFixed(3); z.max="4"; z.value=1;
     centerCrop();
     $("#cropScrim").classList.add("on");
   };
@@ -2368,8 +2379,8 @@ function layoutCrop(){
   clampCrop(); img.style.left=cropState.tx+"px"; img.style.top=cropState.ty+"px";
 }
 function clampCrop(){ const {VP,nw,nh,base,zoom}=cropState; const s=base*zoom, dw=nw*s, dh=nh*s;
-  cropState.tx=Math.min(0, Math.max(VP-dw, cropState.tx));
-  cropState.ty=Math.min(0, Math.max(VP-dh, cropState.ty)); }
+  cropState.tx = dw<=VP ? (VP-dw)/2 : Math.min(0, Math.max(VP-dw, cropState.tx));
+  cropState.ty = dh<=VP ? (VP-dh)/2 : Math.min(0, Math.max(VP-dh, cropState.ty)); }
 function centerCrop(){ const {VP,nw,nh,base,zoom}=cropState; const s=base*zoom; cropState.tx=(VP-nw*s)/2; cropState.ty=(VP-nh*s)/2; layoutCrop(); }
 (function(){ const view=$("#cropView"); if(!view) return; let drag=false,lx=0,ly=0;
   view.addEventListener("pointerdown",e=>{ drag=true; lx=e.clientX; ly=e.clientY; try{view.setPointerCapture(e.pointerId);}catch(_){} });
@@ -2386,7 +2397,8 @@ $("#cropUse").addEventListener("click",()=>{
   const {VP,base,zoom,tx,ty}=cropState, s=base*zoom;
   const sx=(-tx)/s, sy=(-ty)/s, sw=VP/s, sh=VP/s, OUT=480;
   const c=document.createElement("canvas"); c.width=OUT; c.height=OUT;
-  try{ c.getContext("2d").drawImage($("#cropImg"), sx,sy,sw,sh, 0,0,OUT,OUT); }
+  const ctx=c.getContext("2d"); ctx.fillStyle="#ffffff"; ctx.fillRect(0,0,OUT,OUT);
+  try{ ctx.drawImage($("#cropImg"), sx,sy,sw,sh, 0,0,OUT,OUT); }
   catch(e){ toast("Couldn't process that image","warn"); return; }
   let data; try{ data=c.toDataURL("image/jpeg",0.82); }catch(e){ toast("That image is protected and can't be saved — try a different one","warn"); return; }
   $("#cropScrim").classList.remove("on"); const done=cropDone; cropState=null; cropDone=null;
@@ -3110,6 +3122,7 @@ function openSettings(){ renderCatList(); $("#setSort").value=(state.settings.so
 function renderCatList(){
   const host=$("#catList");
   const admin=isAdmin();
+  { const ar=$("#addCatRow"); if(ar) ar.style.display=admin?"":"none"; }
   host.innerHTML=state.cats.map((c,i)=>{
     const count=state.items.filter(it=>it.category===c.name).length;
     return `<div class="catrow" data-i="${i}">
@@ -3150,6 +3163,7 @@ $("#catList").addEventListener("click",e=>{
   }
 });
 $("#btnAddCat").addEventListener("click",()=>{
+  if(!isAdmin()){ toast("Only an admin can add categories","warn"); return; }
   const name=$("#newCatName").value.trim(); const icon=$("#newCatIcon").value.trim()||guessCatIcon(name);
   if(!name){ toast("Enter a category name","warn"); return; }
   if(state.cats.some(c=>c.name.toLowerCase()===name.toLowerCase())){ toast("That category already exists","warn"); return; }
