@@ -406,6 +406,11 @@ body.viewonly .vobadge{display:block}
     </div>
 
     <div class="field">
+      <label>Barcode <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--muted)">(optional — type the digits if scanning fails)</span></label>
+      <input id="fBarcode" inputmode="numeric" placeholder="e.g. 4800194173681" autocomplete="off">
+    </div>
+
+    <div class="field">
       <label>Category <span id="autoCatTag" style="color:var(--green);text-transform:none;letter-spacing:0"></span></label>
       <select id="fCat"></select>
     </div>
@@ -2045,6 +2050,7 @@ function openItemSheet(id){
   // photo
   pendingPhoto=it?it.photo:null;
   pendingBarcode=it?(it.barcode||null):null;
+  $("#fBarcode").value=(it&&it.barcode)?it.barcode:"";
   showPhoto(pendingPhoto);
   $("#autoCatTag").textContent="";
   $("#editExtraBtns").style.display=it?"flex":"none";
@@ -2156,7 +2162,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
     state.items.push(Object.assign({id:uid(),created:Date.now(),location:"pantry",checked:false},data));
     toast(`✓ “${name}” added to ${data.category}`,"good");
   }
-  const bc = pendingBarcode || (editingId ? (getItem(editingId)||{}).barcode : null) || null;
+  const bc = (($("#fBarcode").value||"").replace(/[^0-9A-Za-z]/g,"").trim()) || pendingBarcode || (editingId ? (getItem(editingId)||{}).barcode : null) || null;
   if(bc){
     const tgt = editingId ? getItem(editingId) : state.items[state.items.length-1];
     if(tgt) tgt.barcode=bc;
@@ -2219,7 +2225,7 @@ function offerDuplicate(existing){
   // First choice: update the existing item (and attach this barcode so it can be shared).
   if(confirm("“"+existing.name+"” is already in your "+where+".\n\nOpen it to update — change the photo, name, or category, and attach this barcode so it can be shared?\n\nOK — open & update\nCancel — no, it's a separate/extra one")){
     openItemSheet(existing.id);
-    if(code) pendingBarcode=code;   // save will attach it to this item
+    if(code){ pendingBarcode=code; $("#fBarcode").value=code; }   // save will attach it to this item
     toast("Editing “"+existing.name+"” — make your changes, then Save","good");
     return;
   }
@@ -2444,7 +2450,7 @@ async function startBarcodeScan(){
   try{ await loadZXing(); }
   catch(e){ $("#camHint").textContent="Scanner didn't load — check connection, or type the name"; toast("Couldn't load the barcode scanner (offline?)","warn"); return; }
   if(!camStream) return;
-  try{ zxingReader=zxingReader||new ZXing.BrowserMultiFormatReader(); }
+  try{ if(!zxingReader){ let h=null; try{ h=new Map(); h.set(ZXing.DecodeHintType.TRY_HARDER,true); }catch(_){ h=null; } zxingReader=new ZXing.BrowserMultiFormatReader(h); } }
   catch(e){ $("#camHint").textContent="Scanner error — type the name instead"; return; }
   $("#camHint").textContent="Line up the barcode — hold steady";
   let busy=false;
@@ -2487,7 +2493,7 @@ async function identifyPhoto(dataUrl){
   // 1) is there a barcode visible in the shot? (most accurate)
   try{
     await loadZXing();
-    zxingReader=zxingReader||new ZXing.BrowserMultiFormatReader();
+    if(!zxingReader){ let h=null; try{ h=new Map(); h.set(ZXing.DecodeHintType.TRY_HARDER,true); }catch(_){ h=null; } zxingReader=new ZXing.BrowserMultiFormatReader(h); }
     const res=await zxingReader.decodeFromImageUrl(dataUrl);
     const code=res && (res.getText?res.getText():res.text);
     if(code){ lookupBarcode(code); return; }
@@ -2628,6 +2634,7 @@ async function lookupBarcode(code){
 }
 // Fill the add-item form from a barcode result
 function applyBarcodeResult(nm, catGuess, imgUrl){
+  if(pendingBarcode) $("#fBarcode").value=pendingBarcode;
   const dupN=sameNameItem(nm);
   if(dupN && dupN.id!==editingId && !backupForId){ offerDuplicate(dupN); return; }
   $("#fName").value=nm;
