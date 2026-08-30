@@ -1271,7 +1271,8 @@ function wholeSpiceSVG(name){
 }
 function itemThumb(it){
   const n=(it.name||"").toLowerCase();
-  if(it.photo && it.photo!=="L") return `<img src="${it.photo}" alt="">`;
+  if(it.photo==="L") return `<img class="lazyphoto" data-pid="${it.id}" alt="" src="">`;
+  if(it.photo) return `<img src="${it.photo}" alt="">`;
   if(/cheese sauce|liquid cheese|nacho cheese|cheese dip|cheese spread/.test(n)) return jarSVG("#f0a72e");
   if(/mozzarella|white cheese|string cheese/.test(n)) return cheeseWedgeSVG("#f7f3e6");
   if(/mccafe|mc cafe/.test(n)) return coffeeCanSVG();
@@ -1525,7 +1526,7 @@ function load(){
     migrateCatV2();
   }
   rebuildCats();
-  if(migrateCount()) save();
+  const _phm=migratePhotos(); if(migrateCount()||_phm) save();
   if(_migratedThisLoad){ _migratedThisLoad=false; save(); }
 }
 
@@ -1566,18 +1567,29 @@ function save(){
   if(CLOUD && window.Sync && window.Sync.ready) window.Sync.push(state);   // debounced upload to Firestore
 }
 // Called by the sync layer when a newer version arrives from the cloud
-const PHOTOS_KEY="pantry_photos_v1";
+const PHOTOS_KEY="pantry_photos_v1";   // legacy localStorage key (photos now live in IndexedDB)
 function getPhotoStore(){ try{ return JSON.parse(localStorage.getItem(PHOTOS_KEY)||"{}"); }catch(e){ return {}; } }
-function setLocalPhoto(id,data){ if(!id) return; const o=getPhotoStore(); if(typeof data==="string" && data.startsWith("data:")) o[id]=data; else delete o[id]; try{ localStorage.setItem(PHOTOS_KEY, JSON.stringify(o)); }catch(e){} }
+/* Photos are big; keep them out of localStorage (5MB cap) and out of the synced doc.
+   They live in IndexedDB (large quota), keyed by item id, with a session memory cache for instant display. */
+let _photoMem={}, _photoDB=null;
+function photoDB(){ return _photoDB || (_photoDB=new Promise((res,rej)=>{ try{ const r=indexedDB.open("pantry_photos",1); r.onupgradeneeded=()=>{ try{ r.result.createObjectStore("p"); }catch(e){} }; r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }catch(e){ rej(e); } })); }
+function idbPut(id,data){ return photoDB().then(db=>new Promise(res=>{ try{ const t=db.transaction("p","readwrite"); t.objectStore("p").put(data,id); t.oncomplete=()=>res(true); t.onerror=()=>res(false); }catch(e){ res(false); } })).catch(()=>false); }
+function idbGet(id){ return photoDB().then(db=>new Promise(res=>{ try{ const t=db.transaction("p","readonly"); const rq=t.objectStore("p").get(id); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); }catch(e){ res(null); } })).catch(()=>null); }
+function idbDel(id){ return photoDB().then(db=>new Promise(res=>{ try{ const t=db.transaction("p","readwrite"); t.objectStore("p").delete(id); t.oncomplete=()=>res(true); t.onerror=()=>res(false); }catch(e){ res(false); } })).catch(()=>false); }
+function setLocalPhoto(id,data){ if(!id) return; if(typeof data==="string" && data.startsWith("data:")){ _photoMem[id]=data; idbPut(id,data); } else { delete _photoMem[id]; idbDel(id); } }
+function hydratePhotos(){ try{ document.querySelectorAll("img.lazyphoto").forEach(img=>{ if(img.dataset.done) return; const id=img.dataset.pid; if(_photoMem[id]){ img.src=_photoMem[id]; img.dataset.done="1"; return; } idbGet(id).then(d=>{ if(d){ _photoMem[id]=d; img.src=d; } img.dataset.done="1"; }); }); }catch(e){} }
+// One-time: move any base64 photos (from state, the old localStorage store, and the products cache) into IndexedDB.
+function migratePhotos(){
+  let ch=false;
+  try{ const old=getPhotoStore(); const ids=Object.keys(old); if(ids.length){ ids.forEach(id=>setLocalPhoto(id,old[id])); localStorage.removeItem(PHOTOS_KEY); } }catch(e){}
+  (state.items||[]).forEach(it=>{ if(typeof it.photo==="string" && it.photo.startsWith("data:")){ setLocalPhoto(it.id,it.photo); it.photo="L"; ch=true; } });
+  try{ const pr=JSON.parse(localStorage.getItem(PRODUCTS_KEY)||"{}"); let pch=false; Object.keys(pr).forEach(k=>{ if(pr[k]&&typeof pr[k].photo==="string"&&pr[k].photo.startsWith("data:")){ pr[k].photo=""; pch=true; } }); if(pch) localStorage.setItem(PRODUCTS_KEY,JSON.stringify(pr)); }catch(e){}
+  return ch;
+}
 window.applyRemoteState=function(remote){
   state=Object.assign({items:[],notes:[],settings:{sort:"category"},cats:null,catPrefs:{}},remote||{});
   if(!state.catPrefs) state.catPrefs={};
-  { const ph=getPhotoStore();
-    (state.items||[]).forEach(it=>{
-      if(typeof it.photo==="string" && it.photo.startsWith("data:")) setLocalPhoto(it.id,it.photo);   // capture before it's ever stripped
-      else if((!it.photo||it.photo==="L") && ph[it.id]) it.photo=ph[it.id];                           // restore locally-kept photo
-    });
-  }
+  (state.items||[]).forEach(it=>{ if(typeof it.photo==="string" && it.photo.startsWith("data:")){ setLocalPhoto(it.id,it.photo); it.photo="L"; } });
   migrateCount();
   rebuildCats();
   try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}
@@ -1879,7 +1891,7 @@ function emptyHTML(ico,msg){ return `<div class="empty"><div class="e-ico">${ico
 function escapeHtml(s){ return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 function renderAll(){
-  renderPantry(); renderGrocery(); renderNotes();
+  renderPantry(); renderGrocery(); renderNotes(); hydratePhotos();
   const gc=state.items.filter(i=>i.location==="grocery" && !i.checked).length;
   const badge=$("#groBadge");
   if(gc>0){ badge.style.display="flex"; badge.textContent=gc; } else badge.style.display="none";
@@ -2195,7 +2207,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
   }
   if(!bc && isAdmin()) toast("ℹ️ No barcode on this item — scan its barcode (Add Item) so it can be shared","warn");
   if(ensureCat(data.category)){ rebuildCats(); renderCatList(); }   // auto-create the category if it's new
-  { const _t = editingId ? getItem(editingId) : state.items[state.items.length-1]; if(_t && typeof _t.photo==="string" && _t.photo.startsWith("data:")) setLocalPhoto(_t.id,_t.photo); }
+  { const _t = editingId ? getItem(editingId) : state.items[state.items.length-1]; if(_t && typeof _t.photo==="string" && _t.photo.startsWith("data:")){ setLocalPhoto(_t.id,_t.photo); _t.photo="L"; } }
   learnCat(data.name, data.category); lastCat=data.category;        // remember the user's own preference
   save(); renderAll(); closeItemSheet();
 });
@@ -2264,7 +2276,9 @@ function getProducts(){ try{ return JSON.parse(localStorage.getItem(PRODUCTS_KEY
 function rememberProduct(code, info){
   if(!code) return;
   const o=getProducts();
-  o[code]=Object.assign({}, o[code], info, {ts:Date.now()});
+  const i2=Object.assign({}, info);
+  if(typeof i2.photo==="string" && i2.photo.startsWith("data:")) delete i2.photo;   // never fill localStorage with base64
+  o[code]=Object.assign({}, o[code], i2, {ts:Date.now()});
   try{ localStorage.setItem(PRODUCTS_KEY, JSON.stringify(o)); }catch(e){}
 }
 function showPhoto(url){
