@@ -389,7 +389,6 @@ body.viewonly .vobadge{display:block}
       <img class="pv" id="photoPreview" alt="">
       <div id="photoHint">📷 No photo yet</div>
       <div class="chipbtns">
-        <button class="chip" id="chipScanItem">📷 Scan barcode → auto-fill name</button>
         <button class="chip" id="chipFindImg">🔎 Find image by name</button>
         <button class="chip" id="chipPhoto">🖼️ Add your own photo</button>
       </div>
@@ -416,7 +415,7 @@ body.viewonly .vobadge{display:block}
     </div>
 
     <div class="field">
-      <label class="vacrow"><input type="checkbox" id="fVac"> <span>🛍️ Vacuum sealed <em>(extends shelf life)</em></span></label>
+      <label class="vacrow"><input type="checkbox" id="fVac"> <span>🗜️ Vacuum sealed <em>(extends shelf life)</em></span></label>
     </div>
 
     <div class="field">
@@ -436,9 +435,6 @@ body.viewonly .vobadge{display:block}
       <div class="field">
         <label>Expiration date</label>
         <input id="fExp" type="date">
-      </div>
-      <div class="field" style="flex:0 0 auto;display:flex;align-items:flex-end">
-        <button class="chip" id="chipScanDate" style="margin-bottom:14px">📷 Try scan</button>
       </div>
     </div>
     <div class="sub-hint" style="margin:-8px 0 14px">Tap the date field to pick it (most reliable). “Try scan” reads the printed date on the label — handy, but check it before saving.</div>
@@ -1256,7 +1252,7 @@ const CAT_RULES=[
   [["fish sauce"],"Oils, Vinegars & Condiments"],
   [["liquid seasoning","maggi","knorr"],"Oils, Vinegars & Condiments"],
   [["egg noodle","egg noodles"],"Grains & Pasta"],
-  [["cookie","biscuit","cracker","potato chip","tortilla chip","corn chip","kettle chip","crisps","popcorn","pretzel","granola bar","trail mix","jerky","polvoron","goldilock","goldilocks"],"Snacks"],
+  [["cookie","biscuit","cracker","potato chip","tortilla chip","corn chip","kettle chip","crisps","popcorn","pretzel","granola bar","trail mix","jerky","polvoron","goldilock","goldilocks","fudge","fudgee","wafer bar","chocolate bar"],"Snacks"],
   [["juice","smoothie"],"Beverages"],
   [["mccafe","ground coffee","instant coffee","espresso","coffee bean"],"Beverages"],
   [["soup","broth"],"Canned & Jarred"],
@@ -1266,7 +1262,7 @@ const CAT_RULES=[
   [["bell pepper"],"Fruits & Vegetables"],
   [["potato starch","corn starch","cornstarch","tapioca starch","potato flour"],"Baking"],
   // --- Proteins ---
-  [["chicken","beef","pork","turkey"," ham","bacon","sausage","hotdog","hot dog","steak","ribs","chop","lamb","veal","minced beef","minced pork","minced meat","fish ball","fish","salmon","tuna","tilapia","bangus","shrimp","prawn","crab","squid","sardine","mackerel","anchov","tofu","tempeh","egg","spam","luncheon","pepperoni","salami","bologna"],"Proteins"],
+  [["chicken","beef","pork","turkey"," ham","bacon","sausage","hotdog","hot dog","steak","ribs","chop","lamb","veal","minced beef","minced pork","minced meat","fish ball","fish","salmon","tuna","tilapia","bangus","cod","haddock","pollock","basa","catfish","mahi","shrimp","prawn","crab","squid","sardine","mackerel","anchov","tofu","tempeh","egg","spam","luncheon","pepperoni","salami","bologna"],"Proteins"],
   // --- Dairy & Refrigerated ---
   [["milk","cheese","mozzarella","cheddar","parmesan","yogurt","yoghurt","butter","cream","margarine","sour cream","cottage cheese","creamer","kefir","half and half"],"Dairy & Refrigerated"],
   // --- Baking ---
@@ -1274,9 +1270,9 @@ const CAT_RULES=[
   // --- Spices & Seasonings ---
   [["salt","black pepper","white pepper","peppercorn","pepper flakes","paprika","cumin","cinnamon","oregano","basil","thyme","rosemary","sage","turmeric","curry powder","chili powder","chili pepper","garlic powder","onion powder","cayenne","nutmeg","clove","cardamom","cardamon","coriander","bay leaf","seasoning","italian seasoning","star anise","fennel","dried herb","dried kelp","dried basil","dried oregano","dried thyme","tarragon","savoury","sesame seed","lemon pepper"],"Spices & Seasonings"],
   // --- Oils, Vinegars & Condiments ---
-  [["olive oil","vegetable oil","canola","sesame oil","cooking oil","cooking spray","oil","vinegar","soy sauce","oyster sauce","hoisin","worcestershire","liquid smoke","liquid seasoning","ketchup","catsup","mustard","mayo","mayonnaise","sriracha","hot sauce","bbq sauce","bbq mustard","barbecue","dressing","relish","gochujang","teriyaki","cooking wine","mirin","sake","shaoxing","maggi","koji","sweet soy","tabasco","salsa","pesto","curry paste","dipping sauce","tempura","jam","jelly","honey","maple syrup","syrup"],"Oils, Vinegars & Condiments"],
+  [["olive oil","vegetable oil","canola","sesame oil","cooking oil","cooking spray","oil","vinegar","soy sauce","oyster sauce","hoisin","worcestershire","liquid smoke","liquid seasoning","ketchup","catsup","mustard","mayo","mayonnaise","sriracha","hot sauce","bbq sauce","bbq mustard","barbecue","dressing","relish","gochujang","teriyaki","cooking wine","mirin","sake","shaoxing","maggi","koji","sweet soy","tabasco","salsa","salsa verde","mexican sauce","taco sauce","enchilada sauce","picante","pesto","curry paste","dipping sauce","tempura","jam","jelly","honey","maple syrup","syrup"],"Oils, Vinegars & Condiments"],
   // --- Canned & Jarred ---
-  [["canned","beans","chickpea","kidney bean","black bean","garbanzo","mung bean","tomato paste","tomato sauce","canned tomato","sweet corn","creamed corn","canned corn","peas","jarred","pickle","peperoncini","olives","pasta sauce","spaghetti sauce","refried","sundried tomato","sun dried tomato"],"Canned & Jarred"],
+  [["canned","beans","chickpea","kidney bean","black bean","garbanzo","mung bean","tomato paste","tomato sauce","canned tomato","sweet corn","creamed corn","canned corn","peas","jarred","pickle","peperoncini","olives","caper","capers","pasta sauce","spaghetti sauce","refried","sundried tomato","sun dried tomato"],"Canned & Jarred"],
   // --- Grains & Pasta ---
   [["rice noodle","rice paper","rice","pasta","spaghetti","macaroni","noodle","ramen","udon","vermicelli","lasagna","bread","tortilla","oats","oatmeal","cereal","quinoa","couscous","barley","bun","bagel","grain"],"Grains & Pasta"],
   // --- Fruits & Vegetables ---
@@ -1291,9 +1287,11 @@ const CAT_RULES=[
 // Used only where there's no picker (voice / barcode). Prefers what THIS user has chosen before,
 // then falls back to the original keyword rules.
 function autoCategory(name){
+  const n=(name||"").toLowerCase().trim();
+  const p=state.catPrefs||{};
+  if(p[n]) return p[n];                                    // the exact item you placed before
+  const strict=autoCategoryStrict(name); if(strict) return strict;  // strong keyword wins over word-prefs
   const pref=preferredCategory(name); if(pref) return pref;
-  const n=(name||"").toLowerCase();
-  for(const [kws,cat] of CAT_RULES){ for(const kw of kws){ if(n.includes(kw)) return cat; } }
   return "Other";
 }
 // Keyword-only category (no learned prefs) — for re-sorting existing items into the scheme.
@@ -1761,12 +1759,13 @@ function renderPantry(){
   host.innerHTML=html;
 }
 
+const GROC_SCAN_BAR='<button class="btn sec" id="btnGrocScan" style="margin:0 0 12px;width:100%">📷 Scan items I bought</button>';
 function renderGrocery(){
   const host=$("#view-grocery");
   const items=state.items.filter(i=>i.location==="grocery" && itemMatchesSearch(i));
-  if(!items.length){ host.innerHTML=emptyHTML(searchQ?"🔍":"🛒", searchQ?"No grocery items match.":"Your grocery list is empty.<br>Tap 🛒 on any pantry item, or use voice."); return; }
+  if(!items.length){ host.innerHTML=GROC_SCAN_BAR+emptyHTML(searchQ?"🔍":"🛒", searchQ?"No grocery items match.":"Your grocery list is empty.<br>Tap 🛒 on any pantry item, or use voice."); return; }
   // sort: unchecked first, grouped by category
-  let html="";
+  let html=GROC_SCAN_BAR;
   const active=items.filter(i=>!i.checked), done=items.filter(i=>i.checked);
   const group=(arr)=>{
     let h="";
@@ -1888,10 +1887,14 @@ function newBatch(id){
 function moveItem(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
+  const prev={location:it.location,exp:it.exp,opened:it.opened,percent:it.percent,checked:it.checked};
   it.location = it.location==="pantry" ? "grocery" : "pantry";
   if(it.location==="grocery"){ it.checked=false; it.exp=null; it.opened=null; it.percent=null; }
   save(); renderAll();
-  toast(it.location==="grocery"?`🛒 “${it.name}” added to Grocery`:`↩︎ “${it.name}” back in Pantry`,"good");
+  const toG=it.location==="grocery";
+  toastUndo(toG?`🛒 “${it.name}” added to Grocery`:`↩︎ “${it.name}” back in Pantry`,"good",()=>{
+    Object.assign(it,prev); save(); renderAll(); toast("↩︎ Move undone","good");
+  });
 }
 function toggleCheck(id){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; it.checked=!it.checked; save(); renderAll(); }
 
@@ -1980,6 +1983,7 @@ function openItemSheet(id){
   updatePct();
   // photo
   pendingPhoto=it?it.photo:null;
+  pendingBarcode=it?(it.barcode||null):null;
   showPhoto(pendingPhoto);
   $("#autoCatTag").textContent="";
   $("#editExtraBtns").style.display=it?"flex":"none";
@@ -1987,7 +1991,7 @@ function openItemSheet(id){
   updateFreshInfo();
   itemScrim.classList.add("on");
 }
-function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; }
+function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; }
 
 $("#fabAdd").addEventListener("click",()=>{
   if(!requireEdit()) return;
@@ -2082,6 +2086,12 @@ $("#btnSaveItem").addEventListener("click",()=>{
     state.items.push(Object.assign({id:uid(),created:Date.now(),location:"pantry",checked:false},data));
     toast(`✓ “${name}” added to ${data.category}`,"good");
   }
+  const bc = pendingBarcode || (editingId ? (getItem(editingId)||{}).barcode : null) || null;
+  if(bc){
+    const tgt = editingId ? getItem(editingId) : state.items[state.items.length-1];
+    if(tgt) tgt.barcode=bc;
+    rememberProduct(bc,{name:data.name, category:data.category, photo:data.photo||null});  // learns your corrected photo/category
+  }
   if(ensureCat(data.category)){ rebuildCats(); renderCatList(); }   // auto-create the category if it's new
   learnCat(data.name, data.category); lastCat=data.category;        // remember the user's own preference
   save(); renderAll(); closeItemSheet();
@@ -2125,6 +2135,16 @@ $("#btnSaveNote").addEventListener("click",()=>{
    PHOTO / CAMERA  (barcode scan + date OCR + photo)
    ============================================================ */
 let pendingPhoto=null;
+let pendingBarcode=null;
+// Remembered products, keyed by barcode: {name, category, photo}. Local to this device.
+const PRODUCTS_KEY="pantry_products_v1";
+function getProducts(){ try{ return JSON.parse(localStorage.getItem(PRODUCTS_KEY)||"{}"); }catch(e){ return {}; } }
+function rememberProduct(code, info){
+  if(!code) return;
+  const o=getProducts();
+  o[code]=Object.assign({}, o[code], info, {ts:Date.now()});
+  try{ localStorage.setItem(PRODUCTS_KEY, JSON.stringify(o)); }catch(e){}
+}
 function showPhoto(url){
   const pv=$("#photoPreview"), hint=$("#photoHint");
   if(url){ pv.src=url; pv.style.display="block"; hint.textContent="Tap “Add photo” to replace"; }
@@ -2226,11 +2246,10 @@ async function startDateScan(){
 $("#camClose").addEventListener("click",closeCamera);
 $("#camCancel2").addEventListener("click",closeCamera);
 
-$("#chipScanItem").addEventListener("click",()=>openCamera("barcode"));
-$("#qsBarcode").addEventListener("click",()=>openCamera("barcode"));
+$("#qsBarcode").addEventListener("click",()=>{ scanTarget="pantry"; openCamera("barcode"); });
 $("#qsDate").addEventListener("click",()=>openCamera("date"));
 $("#chipFindImg").addEventListener("click",findImageByName);
-$("#chipScanDate").addEventListener("click",()=>openCamera("date"));
+
 
 // Barcode scanning: native BarcodeDetector where available (Android Chrome),
 // otherwise ZXing (works on iOS Safari + everywhere else) by decoding grabbed frames.
@@ -2243,7 +2262,7 @@ async function startBarcodeScan(){
         if(!camStream) return;
         try{
           const codes=await barcodeDetector.detect(camVideo);
-          if(codes && codes.length){ const code=codes[0].rawValue; closeCamera(); lookupBarcode(code); return; }
+          if(codes && codes.length){ const code=codes[0].rawValue; closeCamera(); onBarcode(code); return; }
         }catch(e){}
         scanLoop=requestAnimationFrame(tick);
       };
@@ -2270,7 +2289,7 @@ async function startBarcodeScan(){
         c.getContext("2d").drawImage(v,0,0,vw,vh);
         const res=await zxingReader.decodeFromImageUrl(c.toDataURL("image/png"));
         const code=res && (res.getText?res.getText():res.text);
-        if(code){ closeCamera(); lookupBarcode(code); return; }
+        if(code){ closeCamera(); onBarcode(code); return; }
       }
     }catch(e){ /* no barcode in this frame — keep trying */ }
     busy=false;
@@ -2340,7 +2359,70 @@ function guessNameFromLabel(raw){
   }
   return best?titleCase(best.toLowerCase()):null;
 }
+let scanTarget="pantry";
+function onBarcode(code){ if(scanTarget==="grocery") groceryScanBarcode(code); else lookupBarcode(code); }
+
+// Resolve a barcode to {name,category,photo} WITHOUT touching the add form (cache -> Open Food Facts).
+async function resolveProduct(code){
+  const cached=getProducts()[code];
+  if(cached && (cached.name||cached.photo)) return {name:cached.name||"", category:cached.category||null, photo:cached.photo||null};
+  try{
+    const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,image_front_small_url`);
+    const j=await r.json();
+    if(j.status===1 && j.product && (j.product.product_name||j.product.brands)){
+      const p=j.product;
+      const nm=[p.brands?p.brands.split(",")[0]:"",p.product_name].filter(Boolean).join(" ").trim();
+      const info={name:nm||("Product "+code), category:autoCategory(nm||""), photo:p.image_front_small_url||null};
+      rememberProduct(code, info);
+      return info;
+    }
+  }catch(e){}
+  return {name:"", category:null, photo:null};
+}
+
+// Grocery-tab scan: check off if on the list -> restock if already in the pantry -> offer to add if unknown.
+async function groceryScanBarcode(code){
+  const gro=state.items.find(i=>i.barcode===code && i.location==="grocery");
+  if(gro){ gro.checked=true; save(); renderAll(); toast(`🛒 “${gro.name}” checked off into the cart`,"good"); return; }
+  const pan=state.items.find(i=>i.barcode===code && i.location==="pantry");
+  if(pan){ pan.percent=100; if(pan.opened) pan.opened=null; save(); renderAll(); toast(`✅ Restocked “${pan.name}” to 100%`,"good"); return; }
+  toast("🔎 Looking up product…","good");
+  const info=await resolveProduct(code);
+  const byName=info.name?findItemByName(info.name):null;
+  if(byName){
+    byName.barcode=byName.barcode||code;
+    if(byName.location==="grocery"){ byName.checked=true; toast(`🛒 “${byName.name}” checked off`,"good"); }
+    else { byName.percent=100; if(byName.opened) byName.opened=null; toast(`✅ Restocked “${byName.name}”`,"good"); }
+    save(); renderAll(); return;
+  }
+  const label=info.name||("Product "+code);
+  if(confirm(`“${label}” isn't on your grocery list or in your pantry.\n\nAdd it to the pantry?`)){
+    openItemSheet();
+    pendingBarcode=code;
+    if(info.name) $("#fName").value=info.name;
+    if(info.category) setCatSelect(info.category);
+    if(info.photo){ pendingPhoto=info.photo; showPhoto(pendingPhoto); }
+    updateFreshInfo();
+  }
+}
+
 async function lookupBarcode(code){
+  pendingBarcode=code;
+  // Already have this exact product in the pantry/grocery? Offer to edit instead of duplicating.
+  const dup=state.items.find(i=>i.barcode===code);
+  if(dup && dup.id!==editingId){
+    if(confirm(`“${dup.name}” is already in your ${dup.location==="grocery"?"grocery list":"pantry"}.\n\nOpen it to update instead of adding a duplicate?`)){
+      if(typeof closeCamera==="function") closeCamera();
+      openItemSheet(dup.id); return;
+    }
+  }
+  // Saved before on this device? Use your remembered name/category/photo instantly.
+  const cached=getProducts()[code];
+  if(cached && (cached.name||cached.photo)){
+    applyBarcodeResult(cached.name||"", cached.category||null, cached.photo||null);
+    toast("✓ From your saved products","good");
+    return;
+  }
   toast("🔎 Looking up product…","good");
   // 1) Open Food Facts
   try{
@@ -2350,6 +2432,7 @@ async function lookupBarcode(code){
       const p=j.product;
       const nm=[p.brands?p.brands.split(",")[0]:"",p.product_name].filter(Boolean).join(" ").trim() || ("Product "+code);
       applyBarcodeResult(nm, guessCatFromOFF(p.categories_tags), p.image_front_small_url);
+      rememberProduct(code,{name:nm, category:$("#fCat").value, photo:p.image_front_small_url||null});
       return;
     }
   }catch(e){}
@@ -2370,12 +2453,12 @@ async function lookupBarcode(code){
       return;
     }
   }catch(e){}
-  toast("Couldn't find this product — type the name","warn");
+  toast("Not in the database — type the name (and add a photo). I'll remember it for next time.","warn");
 }
 // Fill the add-item form from a barcode result
 function applyBarcodeResult(nm, catGuess, imgUrl){
   $("#fName").value=nm;
-  const cat=catGuess||autoCategory(nm);
+  const cat=autoCategory(nm);
   $("#fCat").value=CAT_ORDER.includes(cat)?cat:"Other";
   $("#autoCatTag").textContent=" → auto: "+$("#fCat").value;
   if(imgUrl){ pendingPhoto=imgUrl; showPhoto(pendingPhoto); }
@@ -2788,6 +2871,15 @@ function toast(msg,kind){
   setTimeout(()=>{ el.classList.remove("show"); setTimeout(()=>el.remove(),300); }, 3200);
 }
 window.__toast=toast;
+document.addEventListener("click",e=>{ if(e.target.closest && e.target.closest("#btnGrocScan")){ scanTarget="grocery"; openCamera("barcode"); } });
+// A toast you can tap to undo the action that raised it.
+let _undoFn=null;
+function toastUndo(msg,kind,undoFn){
+  _undoFn=undoFn;
+  toast(msg+' <span style="text-decoration:underline;margin-left:8px;font-weight:800">Tap to undo</span>',kind);
+  const host=$("#toast"), el=host&&host.lastElementChild;
+  if(el){ el.style.cursor="pointer"; el.addEventListener("click",()=>{ const f=_undoFn; _undoFn=null; if(f) f(); el.classList.remove("show"); setTimeout(()=>el.remove(),300); }); }
+}
 
 /* ============================================================
    SWIPE-DOWN / TAP-HANDLE TO CLOSE SHEETS
