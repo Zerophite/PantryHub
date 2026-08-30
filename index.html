@@ -554,6 +554,7 @@ body.viewonly .vobadge{display:block}
       </div>
       <div id="adminIn" style="display:none">
         <div class="sub-hint" style="margin:0 0 10px;color:var(--green-d)">✅ <b>Admin mode ON</b> — items you save that have a barcode also update the shared product database.</div>
+        <button class="btn sec" id="btnAdminTest" style="width:100%;margin-bottom:8px">🧪 Test shared database connection</button>
         <button class="btn danger" id="btnAdminLogout" style="width:100%">🔒 Log out of admin</button>
       </div>
     </div>
@@ -1678,7 +1679,7 @@ function itemCardHTML(it,mode,showCat){
   if(mode!=="grocery" && it.opened) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
   else if(mode!=="grocery" && !it.opened && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
   if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
-  if(mode!=="grocery" && it.backups && it.backups.length) sub.push(`<span class="pill info">🔁 ${it.backups.length} backup</span>`);
+  if(it.backups && it.backups.length) sub.push(`<button class="pill openpill" data-usebackup="${it.id}">🔁 Use spare (${it.backups.length})</button>`);
 
   const barHTML=(it.percent!=null)?`<div class="bar ${pctClass(it.percent)}"><i style="width:${it.percent}%"></i></div>`:"";
 
@@ -1863,6 +1864,8 @@ document.addEventListener("click",e=>{
   if(openb){ markOpened(openb.dataset.open); return; }
   const nb=e.target.closest("[data-newbatch]");
   if(nb){ newBatch(nb.dataset.newbatch); return; }
+  const ub=e.target.closest("[data-usebackup]");
+  if(ub){ useBackup(ub.dataset.usebackup); return; }
   const unopenb=e.target.closest("[data-unopen]");
   if(unopenb){ markUnopened(unopenb.dataset.unopen); return; }
   const move=e.target.closest("[data-move]");
@@ -1902,11 +1905,20 @@ function newBatch(id){
   save(); renderAll();
   toast(`🔄 New batch — “${it.name}” is fresh & unopened again`,"good");
 }
+function useBackup(id){
+  if(!requireEdit()) return;
+  const it=getItem(id); if(!it||!it.backups||!it.backups.length) return;
+  const b=it.backups.shift();
+  const prev={location:it.location,percent:it.percent,opened:it.opened,exp:it.exp,checked:it.checked};
+  it.location="pantry"; it.checked=false; it.percent=100; it.opened=null; it.exp=b.exp||null;
+  save(); renderAll();
+  toastUndo("🔁 Using a spare of “"+it.name+"” — "+it.backups.length+" left","good",()=>{ it.backups.unshift(b); Object.assign(it,prev); save(); renderAll(); });
+}
 function moveItem(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
   if(it.location==="pantry" && it.backups && it.backups.length){
-    if(confirm("You still have "+it.backups.length+" backup stock of “"+it.name+"”.\n\nUse a backup now — refill to 100% with its saved expiry — instead of adding to grocery?")){
+    if(confirm("You've got "+it.backups.length+" spare “"+it.name+"” in reserve.\n\nUse a spare now instead of putting this on your grocery list? It'll refill to full with the spare's own expiry date.\n\nOK — use a spare\nCancel — add to grocery anyway")){
       const b=it.backups.shift();
       const bp={percent:it.percent,opened:it.opened,exp:it.exp};
       it.percent=100; it.opened=null; it.exp=b.exp||null;
@@ -2181,18 +2193,16 @@ function sameNameItem(nm){ const t=normName(nm); return t?state.items.find(i=>no
 function offerDuplicate(existing){
   if(typeof closeCamera==="function") closeCamera();
   const where=existing.location==="grocery"?"grocery list":"pantry";
-  if(confirm("“"+existing.name+"” is already in your "+where+".\n\nOK = add it as an EXTRA / backup stock (kept in reserve with its own expiry; used automatically when this one runs out).\nCancel = just open the existing item.")){
+  if(confirm("You already have “"+existing.name+"” in your "+where+".\n\nWant to keep this one as a spare? It waits in reserve with its own expiry date, and takes over automatically when you run out.\n\nOK — keep it as a spare\nCancel — never mind")){
     openItemSheet();
     backupForId=existing.id;
     $("#fName").value=existing.name;
     setCatSelect(existing.category);
     if(existing.photo){ pendingPhoto=existing.photo; showPhoto(pendingPhoto); }
     pendingBarcode=existing.barcode||null;
-    $("#itemSheetTitle").textContent="Add backup stock";
+    $("#itemSheetTitle").textContent="Add a spare";
     $("#autoCatTag").textContent="";
-    toast("Set or scan the expiry for this backup, then Save","good");
-  }else{
-    openItemSheet(existing.id);
+    toast("Set or scan the expiry for this spare, then Save","good");
   }
 }
 // Remembered products, keyed by barcode: {name, category, photo}. Local to this device.
@@ -3058,6 +3068,15 @@ $("#btnAdminUnlock").addEventListener("click",async()=>{
   else toast("Wrong code","warn");
 });
 $("#btnAdminLogout").addEventListener("click",()=>{ try{ localStorage.removeItem("pantry_admin"); }catch(e){} updateAdminState(); toast("🔒 Logged out of admin","good"); });
+$("#btnAdminTest").addEventListener("click",async()=>{
+  if(!window.Products){ alert("❌ Not connected to the cloud database.\n\n'window.Products' is missing — this device isn't running an online pantry, or the latest code isn't deployed. Open a cloud pantry and make sure the newest index.html is live on GitHub."); return; }
+  toast("Testing shared database…","good");
+  const ok=await window.Products.save("__pantryhub_test__",{name:"test",category:"",photo:""});
+  if(!ok){ alert("❌ WRITE FAILED.\n\nThe shared 'products' Firestore rule is almost certainly missing. In Firebase → Firestore → Rules, add inside your documents block:\n\nmatch /products/{code} {\n  allow read: if true;\n  allow write: if request.auth != null;\n}\n\nthen Publish."); return; }
+  const back=await window.Products.get("__pantryhub_test__");
+  if(back && back.name==="test") alert("✅ Shared database works — writes and reads both go through.\n\nAdmin photo/name changes on items that HAVE a barcode will now reach everyone. (Items with no barcode can't be shared — scan the barcode first.)");
+  else alert("⚠️ The write worked but the read did not — check the 'allow read: if true;' line in your products rule.");
+});
 
 /* Theme (per-device, not synced) */
 const THEME_KEY="pantry_theme";
