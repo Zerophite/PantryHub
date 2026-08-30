@@ -186,7 +186,7 @@ body.viewonly .cathead .catadd{display:none}
 .scrim.on{display:flex}
 .sheet{
   background:var(--card);width:100%;max-width:640px;border-radius:22px 22px 0 0;
-  max-height:92vh;overflow-y:auto;overflow-x:hidden;padding:8px 18px calc(24px + env(safe-area-inset-bottom));
+  max-height:92vh;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:8px 18px calc(24px + env(safe-area-inset-bottom));
   animation:slideup .25s ease;touch-action:pan-y;
 }
 @keyframes slideup{from{transform:translateY(40px);opacity:.6}to{transform:translateY(0);opacity:1}}
@@ -232,6 +232,8 @@ body.viewonly .cathead .catadd{display:none}
 .quickscan{display:flex;gap:10px;margin:4px 0 14px}
 .quickscan .qs{flex:1;padding:14px 8px;border-radius:14px;border:none;background:var(--green);color:#fff;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 .quickscan .qs:active{transform:translateY(1px);opacity:.9}
+#cropView{width:280px;height:280px;max-width:80vw;margin:0 auto;border-radius:14px;overflow:hidden;position:relative;background:#000;touch-action:none;cursor:grab}
+#cropView img{position:absolute;left:0;top:0;-webkit-user-drag:none;user-select:none;pointer-events:none;max-width:none}
 .chip:active{background:#dce7d6}
 
 .freshbox{background:#f1f8e9;border-radius:12px;padding:12px 14px;font-size:13px;color:#33691e;line-height:1.5;margin-top:6px}
@@ -390,6 +392,7 @@ body.viewonly .vobadge{display:block}
       <div id="photoHint">📷 No photo yet</div>
       <div class="chipbtns">
         <button class="chip" id="chipGoogleImg" style="display:none">🔎 Search Google Images</button>
+        <button class="chip" id="chipPasteImg">📋 Paste image</button>
         <button class="chip" id="chipPhoto">🖼️ Add your own photo</button>
       </div>
     </div>
@@ -459,6 +462,22 @@ body.viewonly .vobadge{display:block}
       <button class="btn danger" id="btnDeleteItem">Delete</button>
     </div>
     <button class="btn ghost" id="btnCancelItem">Cancel</button>
+  </div>
+</div>
+
+<!-- ============ Crop image ============ -->
+<div class="scrim" id="cropScrim">
+  <div class="sheet" style="max-width:360px">
+    <div class="grab"></div>
+    <h2>Crop image</h2>
+    <div class="sub-hint" style="margin:0 0 10px">Drag to move · use the slider to zoom. The square is what gets saved.</div>
+    <div id="cropView"><img id="cropImg" alt=""></div>
+    <div class="field" style="margin-top:12px">
+      <label>Zoom</label>
+      <input type="range" id="cropZoom" min="1" max="4" step="0.01" value="1">
+    </div>
+    <button class="btn" id="cropUse">Use this photo</button>
+    <button class="btn ghost" id="cropCancel">Cancel</button>
   </div>
 </div>
 
@@ -2323,7 +2342,69 @@ $("#qsDate").addEventListener("click",()=>openCamera("date"));
 $("#chipGoogleImg").addEventListener("click",()=>{
   const q=$("#fName").value.trim(); if(!q){ toast("Type the item name first","warn"); return; }
   window.open("https://www.google.com/search?tbm=isch&q="+encodeURIComponent(q),"_blank");
-  toast("Find an image, save it to your phone, then tap “Add your own photo”","good");
+  toast("Find an image → long-press → Copy, then tap “Paste image”","good");
+});
+
+/* ---------- Simple square image cropper (used by Paste image) ---------- */
+let cropState=null, cropDone=null;
+function openCropper(url, onDone){
+  cropDone=onDone;
+  const img=$("#cropImg"), view=$("#cropView");
+  img.onload=()=>{
+    const VP=view.clientWidth||280;
+    const nw=img.naturalWidth||1, nh=img.naturalHeight||1;
+    const base=Math.max(VP/nw, VP/nh);
+    cropState={VP,nw,nh,base,zoom:1,tx:0,ty:0};
+    $("#cropZoom").value=1;
+    centerCrop();
+    $("#cropScrim").classList.add("on");
+  };
+  img.onerror=()=>{ toast("Couldn't load that image","warn"); };
+  img.src=url;
+}
+function layoutCrop(){
+  if(!cropState) return; const {nw,nh,base,zoom}=cropState; const s=base*zoom, img=$("#cropImg");
+  img.style.width=(nw*s)+"px"; img.style.height=(nh*s)+"px";
+  clampCrop(); img.style.left=cropState.tx+"px"; img.style.top=cropState.ty+"px";
+}
+function clampCrop(){ const {VP,nw,nh,base,zoom}=cropState; const s=base*zoom, dw=nw*s, dh=nh*s;
+  cropState.tx=Math.min(0, Math.max(VP-dw, cropState.tx));
+  cropState.ty=Math.min(0, Math.max(VP-dh, cropState.ty)); }
+function centerCrop(){ const {VP,nw,nh,base,zoom}=cropState; const s=base*zoom; cropState.tx=(VP-nw*s)/2; cropState.ty=(VP-nh*s)/2; layoutCrop(); }
+(function(){ const view=$("#cropView"); if(!view) return; let drag=false,lx=0,ly=0;
+  view.addEventListener("pointerdown",e=>{ drag=true; lx=e.clientX; ly=e.clientY; try{view.setPointerCapture(e.pointerId);}catch(_){} });
+  view.addEventListener("pointermove",e=>{ if(!drag||!cropState) return; cropState.tx+=(e.clientX-lx); cropState.ty+=(e.clientY-ly); lx=e.clientX; ly=e.clientY; layoutCrop(); });
+  const end=()=>{ drag=false; }; view.addEventListener("pointerup",end); view.addEventListener("pointercancel",end);
+})();
+$("#cropZoom").addEventListener("input",()=>{ if(!cropState) return; const VP=cropState.VP;
+  const cx=VP/2 - cropState.tx, cy=VP/2 - cropState.ty, oldS=cropState.base*cropState.zoom;
+  cropState.zoom=parseFloat($("#cropZoom").value)||1; const newS=cropState.base*cropState.zoom, r=newS/oldS;
+  cropState.tx=VP/2 - cx*r; cropState.ty=VP/2 - cy*r; layoutCrop(); });
+$("#cropCancel").addEventListener("click",()=>{ $("#cropScrim").classList.remove("on"); cropState=null; cropDone=null; });
+$("#cropUse").addEventListener("click",()=>{
+  if(!cropState) return;
+  const {VP,base,zoom,tx,ty}=cropState, s=base*zoom;
+  const sx=(-tx)/s, sy=(-ty)/s, sw=VP/s, sh=VP/s, OUT=480;
+  const c=document.createElement("canvas"); c.width=OUT; c.height=OUT;
+  try{ c.getContext("2d").drawImage($("#cropImg"), sx,sy,sw,sh, 0,0,OUT,OUT); }
+  catch(e){ toast("Couldn't process that image","warn"); return; }
+  let data; try{ data=c.toDataURL("image/jpeg",0.82); }catch(e){ toast("That image is protected and can't be saved — try a different one","warn"); return; }
+  $("#cropScrim").classList.remove("on"); const done=cropDone; cropState=null; cropDone=null;
+  if(done) done(data);
+});
+// Paste an image straight from the clipboard (no Photos access) -> crop -> set
+$("#chipPasteImg").addEventListener("click",async()=>{
+  try{
+    if(!navigator.clipboard || !navigator.clipboard.read){ toast("This browser can't paste images — copy the image, or use Add your own photo","warn"); return; }
+    const items=await navigator.clipboard.read();
+    for(const it of items){
+      const type=(it.types||[]).find(t=>t.startsWith("image/"));
+      if(type){ const blob=await it.getType(type); const url=URL.createObjectURL(blob);
+        openCropper(url,(d)=>{ pendingPhoto=d; showPhoto(pendingPhoto); toast("Photo set — tap Save to keep it","good"); });
+        return; }
+    }
+    toast("No image on the clipboard — copy an image first (long-press → Copy)","warn");
+  }catch(e){ toast("Couldn't read the clipboard — copy the image, then tap Paste and allow access","warn"); }
 });
 
 
@@ -3005,6 +3086,20 @@ enableSwipeClose($("#settingsSheet"), ()=>settingsScrim.classList.remove("on"));
    SETTINGS
    ============================================================ */
 const settingsScrim=$("#settingsScrim");
+/* ---- Background scroll lock while any sheet/modal is open (fixes scroll bleeding to the page behind) ---- */
+let _lockY=0;
+function lockScroll(on){
+  const b=document.body;
+  if(on){ _lockY=window.scrollY||window.pageYOffset||0; b.style.position="fixed"; b.style.top=(-_lockY)+"px"; b.style.left="0"; b.style.right="0"; b.style.width="100%"; }
+  else { b.style.position=""; b.style.top=""; b.style.left=""; b.style.right=""; b.style.width=""; window.scrollTo(0,_lockY); }
+}
+(function(){
+  let locked=false;
+  const sync=()=>{ const open=!!document.querySelector(".scrim.on"); if(open!==locked){ locked=open; lockScroll(open); } };
+  const mo=new MutationObserver(sync);
+  document.querySelectorAll(".scrim").forEach(el=>mo.observe(el,{attributes:true,attributeFilter:["class"]}));
+  sync();
+})();
 $("#btnSettings").addEventListener("click",openSettings);
 $("#btnCloseSettings").addEventListener("click",()=>settingsScrim.classList.remove("on"));
 settingsScrim.addEventListener("click",e=>{ if(e.target===settingsScrim) settingsScrim.classList.remove("on"); });
