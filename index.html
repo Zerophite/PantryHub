@@ -543,6 +543,15 @@ body.viewonly .vobadge{display:block}
       </label>
     </div>
 
+    <div class="setblock" id="adminBlock" style="display:none">
+      <div class="setlabel">Admin</div>
+      <div class="sub-hint" id="adminState" style="margin:0 0 8px">Enter the admin code to contribute missing products to the shared database (everyone benefits).</div>
+      <div class="btnrow">
+        <input id="adminCode" type="password" placeholder="Admin code" autocomplete="off" style="flex:1">
+        <button class="btn sec" id="btnAdminUnlock" style="flex:0 0 auto">Unlock</button>
+      </div>
+    </div>
+
     <div class="setblock">
       <div class="setlabel" style="color:var(--red)">Danger zone</div>
       <button class="btn ghost dzlink" id="btnShowDanger">⚠️ Show danger zone…</button>
@@ -655,6 +664,8 @@ window.CLOUD = !!(window.FIREBASE_CONFIG.apiKey && !/PASTE/.test(window.FIREBASE
 <script>
 window.GEMINI_PROXY = "https://pantry-date.blanktrash.workers.dev/";
 window.GEMINI = !!(window.GEMINI_PROXY && !/PASTE/.test(window.GEMINI_PROXY));
+// SHA-256 hash of your admin code (the code itself is never stored). Empty = admin feature off.
+window.ADMIN_SHA256 = "ab93406304f3e72373d8e697fe713d2108ba38fd03896013b5a5d1e6866de90b";
 </script>
 
 <script>
@@ -1661,6 +1672,7 @@ function itemCardHTML(it,mode,showCat){
   if(mode!=="grocery" && it.opened) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
   else if(mode!=="grocery" && !it.opened && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
   if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
+  if(mode!=="grocery" && it.backups && it.backups.length) sub.push(`<span class="pill info">🔁 ${it.backups.length} backup</span>`);
 
   const barHTML=(it.percent!=null)?`<div class="bar ${pctClass(it.percent)}"><i style="width:${it.percent}%"></i></div>`:"";
 
@@ -1759,7 +1771,7 @@ function renderPantry(){
   host.innerHTML=html;
 }
 
-const GROC_SCAN_BAR='<button class="btn sec" id="btnGrocScan" style="margin:0 0 12px;width:100%">📷 Scan items I bought</button>';
+const GROC_SCAN_BAR='<button class="btn" id="btnGrocScan" style="margin:2px 0 14px;width:100%;font-size:16px">🛒 Grocery Scanner</button>';
 function renderGrocery(){
   const host=$("#view-grocery");
   const items=state.items.filter(i=>i.location==="grocery" && itemMatchesSearch(i));
@@ -1887,6 +1899,16 @@ function newBatch(id){
 function moveItem(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
+  if(it.location==="pantry" && it.backups && it.backups.length){
+    if(confirm("You still have "+it.backups.length+" backup stock of “"+it.name+"”.\n\nUse a backup now — refill to 100% with its saved expiry — instead of adding to grocery?")){
+      const b=it.backups.shift();
+      const bp={percent:it.percent,opened:it.opened,exp:it.exp};
+      it.percent=100; it.opened=null; it.exp=b.exp||null;
+      save(); renderAll();
+      toastUndo("🔁 Backup used for “"+it.name+"” — "+it.backups.length+" left","good",()=>{ it.backups.unshift(b); Object.assign(it,bp); save(); renderAll(); });
+      return;
+    }
+  }
   const prev={location:it.location,exp:it.exp,opened:it.opened,percent:it.percent,checked:it.checked};
   it.location = it.location==="pantry" ? "grocery" : "pantry";
   if(it.location==="grocery"){ it.checked=false; it.exp=null; it.opened=null; it.percent=null; }
@@ -1965,6 +1987,7 @@ function setCatSelect(c){
 
 function openItemSheet(id){
   editingId=id||null;
+  backupForId=null;
   populateCatSelect();
   const it=id?getItem(id):null;
   $("#itemSheetTitle").textContent=it?"Edit Item":"Add Item";
@@ -1991,7 +2014,7 @@ function openItemSheet(id){
   updateFreshInfo();
   itemScrim.classList.add("on");
 }
-function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; }
+function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; backupForId=null; }
 
 $("#fabAdd").addEventListener("click",()=>{
   if(!requireEdit()) return;
@@ -2078,6 +2101,13 @@ $("#btnSaveItem").addEventListener("click",()=>{
     qty:$("#fQty").value.trim(), exp:$("#fExp").value||null, opened:$("#fOpen").value||null,
     store:storeVal, vac:$("#fVac").checked, note:$("#fNote").value.trim(), photo:pendingPhoto||null,
   };
+  if(backupForId){
+    const host=getItem(backupForId);
+    if(host){ (host.backups=host.backups||[]).push({exp:data.exp||null, added:Date.now()});
+      toast("🔁 Backup added — "+host.backups.length+" in reserve for “"+host.name+"”","good"); }
+    if(pendingBarcode){ rememberProduct(pendingBarcode,{name:data.name,category:data.category,photo:data.photo||null}); if(isAdmin() && window.Products) window.Products.save(pendingBarcode,{name:data.name,category:data.category,photo:data.photo||null}); }
+    save(); renderAll(); closeItemSheet(); return;
+  }
   if(editingId){
     Object.assign(getItem(editingId),data);
     toast("✓ Saved","good");
@@ -2091,6 +2121,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
     const tgt = editingId ? getItem(editingId) : state.items[state.items.length-1];
     if(tgt) tgt.barcode=bc;
     rememberProduct(bc,{name:data.name, category:data.category, photo:data.photo||null});  // learns your corrected photo/category
+    if(isAdmin() && window.Products) window.Products.save(bc,{name:data.name,category:data.category,photo:data.photo||null});
   }
   if(ensureCat(data.category)){ rebuildCats(); renderCatList(); }   // auto-create the category if it's new
   learnCat(data.name, data.category); lastCat=data.category;        // remember the user's own preference
@@ -2136,6 +2167,27 @@ $("#btnSaveNote").addEventListener("click",()=>{
    ============================================================ */
 let pendingPhoto=null;
 let pendingBarcode=null;
+let backupForId=null;
+function normName(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
+function sameNameItem(nm){ const t=normName(nm); return t?state.items.find(i=>normName(i.name)===t):null; }
+// Same product already here -> offer to keep it as a backup batch (or open the existing one).
+function offerDuplicate(existing){
+  if(typeof closeCamera==="function") closeCamera();
+  const where=existing.location==="grocery"?"grocery list":"pantry";
+  if(confirm("“"+existing.name+"” is already in your "+where+".\n\nOK = add it as an EXTRA / backup stock (kept in reserve with its own expiry; used automatically when this one runs out).\nCancel = just open the existing item.")){
+    openItemSheet();
+    backupForId=existing.id;
+    $("#fName").value=existing.name;
+    setCatSelect(existing.category);
+    if(existing.photo){ pendingPhoto=existing.photo; showPhoto(pendingPhoto); }
+    pendingBarcode=existing.barcode||null;
+    $("#itemSheetTitle").textContent="Add backup stock";
+    $("#autoCatTag").textContent="";
+    toast("Set or scan the expiry for this backup, then Save","good");
+  }else{
+    openItemSheet(existing.id);
+  }
+}
 // Remembered products, keyed by barcode: {name, category, photo}. Local to this device.
 const PRODUCTS_KEY="pantry_products_v1";
 function getProducts(){ try{ return JSON.parse(localStorage.getItem(PRODUCTS_KEY)||"{}"); }catch(e){ return {}; } }
@@ -2366,6 +2418,7 @@ function onBarcode(code){ if(scanTarget==="grocery") groceryScanBarcode(code); e
 async function resolveProduct(code){
   const cached=getProducts()[code];
   if(cached && (cached.name||cached.photo)) return {name:cached.name||"", category:cached.category||null, photo:cached.photo||null};
+  if(window.Products){ try{ const sp=await window.Products.get(code); if(sp && (sp.name||sp.photo)){ const info={name:sp.name||"",category:sp.category||null,photo:sp.photo||null}; rememberProduct(code,info); return info; } }catch(e){} }
   try{
     const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,image_front_small_url`);
     const j=await r.json();
@@ -2385,15 +2438,14 @@ async function groceryScanBarcode(code){
   const gro=state.items.find(i=>i.barcode===code && i.location==="grocery");
   if(gro){ gro.checked=true; save(); renderAll(); toast(`🛒 “${gro.name}” checked off into the cart`,"good"); return; }
   const pan=state.items.find(i=>i.barcode===code && i.location==="pantry");
-  if(pan){ pan.percent=100; if(pan.opened) pan.opened=null; save(); renderAll(); toast(`✅ Restocked “${pan.name}” to 100%`,"good"); return; }
+  if(pan){ offerDuplicate(pan); return; }
   toast("🔎 Looking up product…","good");
   const info=await resolveProduct(code);
   const byName=info.name?findItemByName(info.name):null;
   if(byName){
-    byName.barcode=byName.barcode||code;
-    if(byName.location==="grocery"){ byName.checked=true; toast(`🛒 “${byName.name}” checked off`,"good"); }
-    else { byName.percent=100; if(byName.opened) byName.opened=null; toast(`✅ Restocked “${byName.name}”`,"good"); }
-    save(); renderAll(); return;
+    if(byName.location==="grocery"){ byName.barcode=byName.barcode||code; byName.checked=true; save(); renderAll(); toast(`🛒 “${byName.name}” checked off`,"good"); }
+    else offerDuplicate(byName);
+    return;
   }
   const label=info.name||("Product "+code);
   if(confirm(`“${label}” isn't on your grocery list or in your pantry.\n\nAdd it to the pantry?`)){
@@ -2410,18 +2462,20 @@ async function lookupBarcode(code){
   pendingBarcode=code;
   // Already have this exact product in the pantry/grocery? Offer to edit instead of duplicating.
   const dup=state.items.find(i=>i.barcode===code);
-  if(dup && dup.id!==editingId){
-    if(confirm(`“${dup.name}” is already in your ${dup.location==="grocery"?"grocery list":"pantry"}.\n\nOpen it to update instead of adding a duplicate?`)){
-      if(typeof closeCamera==="function") closeCamera();
-      openItemSheet(dup.id); return;
-    }
-  }
+  if(dup && dup.id!==editingId){ offerDuplicate(dup); return; }
   // Saved before on this device? Use your remembered name/category/photo instantly.
   const cached=getProducts()[code];
   if(cached && (cached.name||cached.photo)){
     applyBarcodeResult(cached.name||"", cached.category||null, cached.photo||null);
     toast("✓ From your saved products","good");
     return;
+  }
+  // Shared product database (admin-curated) before hitting the internet
+  if(window.Products){
+    try{ const sp=await window.Products.get(code);
+      if(sp && (sp.name||sp.photo)){ rememberProduct(code,{name:sp.name,category:sp.category,photo:sp.photo});
+        applyBarcodeResult(sp.name||"", sp.category||null, sp.photo||null);
+        toast("✓ From the shared product database","good"); return; } }catch(e){}
   }
   toast("🔎 Looking up product…","good");
   // 1) Open Food Facts
@@ -2457,6 +2511,8 @@ async function lookupBarcode(code){
 }
 // Fill the add-item form from a barcode result
 function applyBarcodeResult(nm, catGuess, imgUrl){
+  const dupN=sameNameItem(nm);
+  if(dupN && dupN.id!==editingId && !backupForId){ offerDuplicate(dupN); return; }
   $("#fName").value=nm;
   const cat=autoCategory(nm);
   $("#fCat").value=CAT_ORDER.includes(cat)?cat:"Other";
@@ -2929,7 +2985,7 @@ $("#btnSettings").addEventListener("click",openSettings);
 $("#btnCloseSettings").addEventListener("click",()=>settingsScrim.classList.remove("on"));
 settingsScrim.addEventListener("click",e=>{ if(e.target===settingsScrim) settingsScrim.classList.remove("on"); });
 
-function openSettings(){ renderCatList(); $("#setSort").value=(state.settings.sort==="newest"?"newest":"category"); $("#setTheme").value=currentTheme(); const db=$("#dangerBox"); if(db) db.style.display="none"; const ap=$("#advPantry"); if(ap) ap.style.display="none"; updateSnapUI(); settingsScrim.classList.add("on"); }
+function openSettings(){ renderCatList(); $("#setSort").value=(state.settings.sort==="newest"?"newest":"category"); $("#setTheme").value=currentTheme(); const db=$("#dangerBox"); if(db) db.style.display="none"; const ap=$("#advPantry"); if(ap) ap.style.display="none"; updateSnapUI(); { const ab=$("#adminBlock"); if(ab) ab.style.display=window.ADMIN_SHA256?"":"none"; } updateAdminState(); settingsScrim.classList.add("on"); }
 
 function renderCatList(){
   const host=$("#catList");
@@ -2984,6 +3040,19 @@ $("#btnAddCat").addEventListener("click",()=>{
 
 $("#setSort").addEventListener("change",()=>{ state.settings.sort=$("#setSort").value; save(); renderAll(); });
 $("#btnAutoSort").addEventListener("click",autoSortAllItems);
+function isAdmin(){ try{ return localStorage.getItem("pantry_admin")==="1"; }catch(e){ return false; } }
+async function sha256hex(str){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
+function updateAdminState(){ const el=$("#adminState"), btn=$("#btnAdminUnlock"); if(!el||!btn) return;
+  if(isAdmin()){ el.innerHTML="✅ <b>Admin mode ON</b> — items you save also update the shared product database."; btn.textContent="Lock"; }
+  else { el.textContent="Enter the admin code to contribute missing products to the shared database (everyone benefits)."; btn.textContent="Unlock"; } }
+$("#btnAdminUnlock").addEventListener("click",async()=>{
+  if(isAdmin()){ try{ localStorage.removeItem("pantry_admin"); }catch(e){} updateAdminState(); toast("Admin mode off","good"); return; }
+  const code=($("#adminCode").value||""); if(!code){ toast("Enter the admin code","warn"); return; }
+  if(!window.ADMIN_SHA256){ toast("Admin code isn't set up yet","warn"); return; }
+  const h=await sha256hex(code);
+  if(h===window.ADMIN_SHA256){ try{ localStorage.setItem("pantry_admin","1"); }catch(e){} $("#adminCode").value=""; updateAdminState(); toast("✅ Admin mode unlocked","good"); }
+  else toast("Wrong code","warn");
+});
 
 /* Theme (per-device, not synced) */
 const THEME_KEY="pantry_theme";
@@ -3232,6 +3301,11 @@ if(window.CLOUD){
   /* ---------- Debounced push ---------- */
   let pushTimer=null, latest=null, dirty=false;
   window.Sync={ready:false, push(st){ latest=st; dirty=true; clearTimeout(pushTimer); pushTimer=setTimeout(flush,700); }};
+  // Shared product database (keyed by barcode) — read by everyone, written by admins.
+  window.Products={
+    async get(code){ try{ const snap=await getDoc(doc(db,"products",String(code))); return snap.exists()?snap.data():null; }catch(e){ return null; } },
+    async save(code,info){ try{ await setDoc(doc(db,"products",String(code)),{name:info.name||"",category:info.category||"",photo:info.photo||"",updatedAt:serverTimestamp()},{merge:true}); return true; }catch(e){ return false; } }
+  };
   async function flush(){
     if(!curId || !window.Sync.ready || !dirty) return;
     dirty=false; clearTimeout(pushTimer);
