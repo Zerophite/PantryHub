@@ -545,10 +545,16 @@ body.viewonly .vobadge{display:block}
 
     <div class="setblock" id="adminBlock" style="display:none">
       <div class="setlabel">Admin</div>
-      <div class="sub-hint" id="adminState" style="margin:0 0 8px">Enter the admin code to contribute missing products to the shared database (everyone benefits).</div>
-      <div class="btnrow">
-        <input id="adminCode" type="password" placeholder="Admin code" autocomplete="off" style="flex:1">
-        <button class="btn sec" id="btnAdminUnlock" style="flex:0 0 auto">Unlock</button>
+      <div id="adminOut">
+        <div class="sub-hint" style="margin:0 0 8px">Enter the admin code to contribute missing products to the shared database (everyone benefits).</div>
+        <div class="btnrow">
+          <input id="adminCode" type="password" placeholder="Admin code" autocomplete="off" style="flex:1">
+          <button class="btn sec" id="btnAdminUnlock" style="flex:0 0 auto">Unlock</button>
+        </div>
+      </div>
+      <div id="adminIn" style="display:none">
+        <div class="sub-hint" style="margin:0 0 10px;color:var(--green-d)">✅ <b>Admin mode ON</b> — items you save that have a barcode also update the shared product database.</div>
+        <button class="btn danger" id="btnAdminLogout" style="width:100%">🔒 Log out of admin</button>
       </div>
     </div>
 
@@ -665,7 +671,7 @@ window.CLOUD = !!(window.FIREBASE_CONFIG.apiKey && !/PASTE/.test(window.FIREBASE
 window.GEMINI_PROXY = "https://pantry-date.blanktrash.workers.dev/";
 window.GEMINI = !!(window.GEMINI_PROXY && !/PASTE/.test(window.GEMINI_PROXY));
 // SHA-256 hash of your admin code (the code itself is never stored). Empty = admin feature off.
-window.ADMIN_SHA256 = "ab93406304f3e72373d8e697fe713d2108ba38fd03896013b5a5d1e6866de90b";
+window.ADMIN_SHA256 = "";
 </script>
 
 <script>
@@ -2121,8 +2127,9 @@ $("#btnSaveItem").addEventListener("click",()=>{
     const tgt = editingId ? getItem(editingId) : state.items[state.items.length-1];
     if(tgt) tgt.barcode=bc;
     rememberProduct(bc,{name:data.name, category:data.category, photo:data.photo||null});  // learns your corrected photo/category
-    if(isAdmin() && window.Products) window.Products.save(bc,{name:data.name,category:data.category,photo:data.photo||null});
+    if(isAdmin() && window.Products) window.Products.save(bc,{name:data.name,category:data.category,photo:data.photo||null}).then(ok=>toast(ok?"📤 Saved to the shared database":"⚠️ Shared save failed — check the Firestore rule",ok?"good":"warn"));
   }
+  if(!bc && isAdmin()) toast("ℹ️ No barcode on this item — scan its barcode (Add Item) so it can be shared","warn");
   if(ensureCat(data.category)){ rebuildCats(); renderCatList(); }   // auto-create the category if it's new
   learnCat(data.name, data.category); lastCat=data.category;        // remember the user's own preference
   save(); renderAll(); closeItemSheet();
@@ -2507,7 +2514,7 @@ async function lookupBarcode(code){
       return;
     }
   }catch(e){}
-  toast("Not in the database — type the name (and add a photo). I'll remember it for next time.","warn");
+  toast(isAdmin()?"Not found — as admin: type the name, add a photo, then Save to add it to the shared database.":"Not in the database — type the name (and add a photo). I'll remember it next time.","warn");
 }
 // Fill the add-item form from a barcode result
 function applyBarcodeResult(nm, catGuess, imgUrl){
@@ -3042,17 +3049,15 @@ $("#setSort").addEventListener("change",()=>{ state.settings.sort=$("#setSort").
 $("#btnAutoSort").addEventListener("click",autoSortAllItems);
 function isAdmin(){ try{ return localStorage.getItem("pantry_admin")==="1"; }catch(e){ return false; } }
 async function sha256hex(str){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
-function updateAdminState(){ const el=$("#adminState"), btn=$("#btnAdminUnlock"); if(!el||!btn) return;
-  if(isAdmin()){ el.innerHTML="✅ <b>Admin mode ON</b> — items you save also update the shared product database."; btn.textContent="Lock"; }
-  else { el.textContent="Enter the admin code to contribute missing products to the shared database (everyone benefits)."; btn.textContent="Unlock"; } }
+function updateAdminState(){ const inn=$("#adminIn"), out=$("#adminOut"); if(!inn||!out) return; const a=isAdmin(); inn.style.display=a?"":"none"; out.style.display=a?"none":""; }
 $("#btnAdminUnlock").addEventListener("click",async()=>{
-  if(isAdmin()){ try{ localStorage.removeItem("pantry_admin"); }catch(e){} updateAdminState(); toast("Admin mode off","good"); return; }
   const code=($("#adminCode").value||""); if(!code){ toast("Enter the admin code","warn"); return; }
   if(!window.ADMIN_SHA256){ toast("Admin code isn't set up yet","warn"); return; }
   const h=await sha256hex(code);
   if(h===window.ADMIN_SHA256){ try{ localStorage.setItem("pantry_admin","1"); }catch(e){} $("#adminCode").value=""; updateAdminState(); toast("✅ Admin mode unlocked","good"); }
   else toast("Wrong code","warn");
 });
+$("#btnAdminLogout").addEventListener("click",()=>{ try{ localStorage.removeItem("pantry_admin"); }catch(e){} updateAdminState(); toast("🔒 Logged out of admin","good"); });
 
 /* Theme (per-device, not synced) */
 const THEME_KEY="pantry_theme";
