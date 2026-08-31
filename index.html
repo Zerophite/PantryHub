@@ -461,34 +461,16 @@ body.viewonly .vobadge{display:block}
       <input id="fQty" placeholder="e.g. large white bottle · brand" autocomplete="off">
     </div>
 
-    <div class="row2">
-      <div class="field">
-        <label>Expiration date</label>
-        <input id="fExp" type="date">
+    <div class="field">
+      <label>Expiration date</label>
+      <div style="display:flex;gap:8px">
+        <select id="fExpMo" style="flex:1.4"><option value="">Month</option><option value="01">Jan · 01</option><option value="02">Feb · 02</option><option value="03">Mar · 03</option><option value="04">Apr · 04</option><option value="05">May · 05</option><option value="06">Jun · 06</option><option value="07">Jul · 07</option><option value="08">Aug · 08</option><option value="09">Sep · 09</option><option value="10">Oct · 10</option><option value="11">Nov · 11</option><option value="12">Dec · 12</option></select>
+        <select id="fExpDy" style="flex:0.9"><option value="">Day</option></select>
+        <select id="fExpYr" style="flex:1"><option value="">Year</option></select>
       </div>
+      <input type="hidden" id="fExp">
     </div>
-    <div class="field" style="margin-top:-4px">
-      <label style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">Quick set — from today</label>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button type="button" class="chip expquick" data-exp="7">+1 wk</button>
-        <button type="button" class="chip expquick" data-exp="30">+1 mo</button>
-        <button type="button" class="chip expquick" data-exp="90">+3 mo</button>
-        <button type="button" class="chip expquick" data-exp="180">+6 mo</button>
-        <button type="button" class="chip expquick" data-exp="365">+1 yr</button>
-        <button type="button" class="chip expquick" data-exp="730">+2 yr</button>
-      </div>
-    </div>
-    <div class="field" style="margin-top:-6px">
-      <label style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">…or type it — MM / DD / YYYY</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input id="fExpM" inputmode="numeric" maxlength="2" placeholder="MM" style="width:64px;text-align:center">
-        <span style="color:var(--muted);font-weight:800">/</span>
-        <input id="fExpD" inputmode="numeric" maxlength="2" placeholder="DD" style="width:64px;text-align:center">
-        <span style="color:var(--muted);font-weight:800">/</span>
-        <input id="fExpY" inputmode="numeric" maxlength="4" placeholder="YYYY" style="width:86px;text-align:center">
-      </div>
-    </div>
-    <div class="sub-hint" style="margin:2px 0 14px">Use the picker, type it above (e.g. 12 = December), or tap “Scan expiry date” at the top.</div>
+    <div class="sub-hint" style="margin:2px 0 14px">Pick month, day and year — or tap “Scan expiry date” at the top. Leave blank if there's no date.</div>
 
     <div class="field">
       <label>Opened? (starts the freshness timer)</label>
@@ -1409,6 +1391,16 @@ function autoSortAllItems(){
 /* ---------- Freshness database: days of good quality after OPENING (or after buying, for fresh produce/meat) ----------
    Values based on USDA FoodKeeper / StillTasty guidance. Longest-matching, most-specific keywords are listed first. */
 const FRESH=[
+  // Bouillon / stock / soup bases are shelf-stable pastes — keep them off the raw-meat matches below.
+  [["better than bouillon","bouillon","stock cube","beef cube","pork cube","chicken cube","vegetable cube","maggi cube","knorr cube","bouillon cube","broth cube","chicken base","beef base","vegetable base","broth base","soup base","stock paste","bouillon paste"],{fridge:540,freezer:365,pantry:365}],
+  // More brand/keyword mis-match guards (specifics BEFORE the broad produce/meat matches):
+  [["avocado oil"],{fridge:0,freezer:0,pantry:365}],
+  [["apple cider vinegar","cider vinegar","balsamic vinegar","rice vinegar","wine vinegar","white vinegar","malt vinegar","distilled vinegar"],{fridge:730,freezer:0,pantry:730}],
+  [["garlic powder","onion powder","garlic salt","onion salt","garlic granule","onion granule"],{fridge:0,freezer:0,pantry:730}],
+  [["caper","capers","brined olive","green olive","black olive","kalamata"],{fridge:365,freezer:0,pantry:14}],
+  [["pancit canton","instant noodle","cup noodle","instant ramen","noodle soup","bone noodle"],{fridge:0,freezer:0,pantry:365}],
+  [["polvoron"],{fridge:180,freezer:180,pantry:60}],
+  [["sesame seed","toasted sesame"],{fridge:365,freezer:365,pantry:365}],
   // --- Dry seasoning/spice OVERRIDES first (stop fresh produce/meat words from stealing the match) ---
   [["lemon pepper","black pepper","white pepper","peppercorn","pepper flakes","red pepper","chili pepper","chilli pepper","crushed pepper","cracked pepper","pepper powder","chili flakes","chilli flakes","chili powder","cayenne pepper"],{fridge:730,freezer:730,pantry:730}],
   [["ground cinnamon","ground ginger","ground clove","ground cumin","ground coriander","ground nutmeg","ground allspice","ground mustard","ground turmeric","ground paprika","ground pepper"],{fridge:365,freezer:365,pantry:365}],
@@ -1516,7 +1508,7 @@ const FRESH=[
   [["tofu"],{fridge:4,freezer:120,pantry:1}],
   [["sardine","canned fish","tuna"],{fridge:3,freezer:0,pantry:1}],
   [["salted egg"],{fridge:30,freezer:0,pantry:7}],
-  [["egg"],{fridge:28,freezer:0,pantry:2}],
+  [["egg"],{fridge:35,freezer:0,pantry:7}],
   // --- Fruit / Veggies (fresh; timer from purchase) ---
   [["spinach","bok choy","kangkong","malunggay","dahon","lettuce","cabbage","greens","watercress","water crest"],{fridge:4,freezer:0,pantry:1}],
   [["broccoli","cauliflower","asparagus"],{fridge:6,freezer:240,pantry:1}],
@@ -1528,7 +1520,7 @@ const FRESH=[
   [["banana"],{fridge:5,freezer:60,pantry:5}],
   [["mango"],{fridge:6,freezer:180,pantry:4}],
   [["apple"],{fridge:40,freezer:240,pantry:7}],
-  [["lemon","lime"],{fridge:28,freezer:120,pantry:7}],
+  [["lemon","lemons","fresh lime","limes","lime wedge","key lime"],{fridge:28,freezer:120,pantry:7}],
   [["tomato fresh","fresh tomato"],{fridge:7,freezer:60,pantry:5}],
   [["ginger"],{fridge:21,freezer:180,pantry:7}],
   [["garlic"],{fridge:14,freezer:180,pantry:90}],
@@ -1550,13 +1542,13 @@ const FRESH=[
   [["tomato paste","tomato sauce"],{fridge:6,freezer:90,pantry:1}],
   [["pasta sauce","spaghetti sauce","pesto","salsa"],{fridge:5,freezer:90,pantry:1}],
   [["sundried tomato"],{fridge:90,freezer:0,pantry:14}],
-  [["pickle","peperoncini","dill","sweet pickle"],{fridge:120,freezer:0,pantry:7}],
+  [["pickle","peperoncini","dill pickle","sweet pickle","gherkin"],{fridge:120,freezer:0,pantry:21}],
   [["tempura","dipping sauce"],{fridge:60,freezer:0,pantry:14}],
   [["jam","jelly","preserve","marmalade"],{fridge:180,freezer:0,pantry:14}],
   // --- Oils / vinegars / cooking wines (after opening) ---
   [["sesame oil"],{fridge:365,freezer:0,pantry:180}],
   [["olive oil","canola","vegetable oil","cooking spray","oil"],{fridge:0,freezer:0,pantry:180}],
-  [["vinegar"],{fridge:0,freezer:0,pantry:730}],
+  [["vinegar"],{fridge:730,freezer:0,pantry:730}],
   [["shaoxing","cooking wine","sake","mirin","rice wine","red cooking","white cooking"],{fridge:0,freezer:0,pantry:365}],
   // --- Baking / dry pantry staples (after opening) ---
   [["baking powder"],{fridge:0,freezer:0,pantry:180}],
@@ -2201,7 +2193,7 @@ function openItemSheet(id){
   $("#fQty").value=it?it.qty:"";
   $("#fCntVal").textContent=it?itemCount(it):1;
   $("#fExp").value=it?(it.exp||""):"";
-  if(typeof fillTypedFromExp==="function") fillTypedFromExp();
+  if(typeof fillSelectsFromExp==="function") fillSelectsFromExp();
   $("#fOpen").value=it?(it.opened||""):"";
   $("#fVac").checked=!!(it&&it.vac);
   { const bc=$("#fByCount"); if(bc){ bc.checked = it ? usesCount(it) : false; } const af=$("#amtField"); if(af) af.style.display = (it?usesCount(it):false) ? "none" : ""; }
@@ -2222,7 +2214,7 @@ function openItemSheet(id){
   try{ $("#itemSheet").scrollTop=0; }catch(e){}
   itemScrim.classList.add("on");
 }
-function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; backupForId=null; }
+function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; backupForId=null; chainDate=false; }
 
 $("#fabAdd").addEventListener("click",()=>{
   if(!requireEdit()) return;
@@ -2299,27 +2291,24 @@ function updateFreshInfo(){
   else { box.className=""; box.innerHTML=""; }
 }
 
-function syncExpFromTyped(){
-  const mm=parseInt($("#fExpM").value,10), dd=parseInt($("#fExpD").value,10), yy=parseInt($("#fExpY").value,10);
-  if(mm>=1&&mm<=12 && dd>=1&&dd<=31 && yy>=2000&&yy<=2100){
-    const iso=yy+"-"+String(mm).padStart(2,"0")+"-"+String(dd).padStart(2,"0");
-    const d=new Date(iso+"T00:00:00");
-    if(!isNaN(d) && d.getMonth()+1===mm && d.getDate()===dd){ $("#fExp").value=iso; updateFreshInfo(); }
-  }
+/* Expiry via three dropdowns (Month / Day / Year) */
+(function(){
+  const dy=$("#fExpDy"), yr=$("#fExpYr");
+  if(dy && dy.options.length<=1){ for(let d=1;d<=31;d++){ const o=document.createElement("option"); o.value=String(d).padStart(2,"0"); o.textContent=d; dy.appendChild(o); } }
+  if(yr && yr.options.length<=1){ const y0=new Date().getFullYear(); for(let y=y0;y<=y0+10;y++){ const o=document.createElement("option"); o.value=String(y); o.textContent=y; yr.appendChild(o); } }
+})();
+function syncExpFromSelects(){
+  const mo=$("#fExpMo").value, dd=$("#fExpDy").value, yy=$("#fExpYr").value;
+  let iso="";
+  if(mo&&dd&&yy){ const d=new Date(yy+"-"+mo+"-"+dd+"T00:00:00"); if(!isNaN(d) && (d.getMonth()+1)===parseInt(mo,10) && d.getDate()===parseInt(dd,10)) iso=yy+"-"+mo+"-"+dd; }
+  $("#fExp").value=iso; updateFreshInfo();
 }
-function fillTypedFromExp(){
+function fillSelectsFromExp(){
   const v=($("#fExp").value)||"";
-  if(/^\d{4}-\d{2}-\d{2}$/.test(v)){ const p=v.split("-"); $("#fExpY").value=p[0]; $("#fExpM").value=p[1]; $("#fExpD").value=p[2]; }
-  else { $("#fExpM").value=""; $("#fExpD").value=""; $("#fExpY").value=""; }
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v)){ const p=v.split("-"); $("#fExpYr").value=p[0]; $("#fExpMo").value=p[1]; $("#fExpDy").value=String(parseInt(p[2],10)).padStart(2,"0"); }
+  else { $("#fExpMo").value=""; $("#fExpDy").value=""; $("#fExpYr").value=""; }
 }
-["fExpM","fExpD","fExpY"].forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("input",syncExpFromTyped); });
-$("#fExp").addEventListener("change",fillTypedFromExp);
-document.addEventListener("click",e=>{ const q=e.target.closest(".expquick"); if(!q) return;
-  const days=parseInt(q.dataset.exp,10)||0; const d=new Date(); d.setDate(d.getDate()+days);
-  const iso=d.toISOString().slice(0,10); $("#fExp").value=iso;
-  if(typeof fillTypedFromExp==="function") fillTypedFromExp(); updateFreshInfo();
-  toast("📅 Best-before set to "+iso,"good");
-});
+["fExpMo","fExpDy","fExpYr"].forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("change",syncExpFromSelects); });
 $("#fByCount") && $("#fByCount").addEventListener("change",()=>{ const af=$("#amtField"); if(af) af.style.display=$("#fByCount").checked?"none":""; });
 $("#fCntMinus").addEventListener("click",()=>{ $("#fCntVal").textContent=Math.max(1,(parseInt($("#fCntVal").textContent,10)||1)-1); });
 $("#fCntPlus").addEventListener("click",()=>{ $("#fCntVal").textContent=(parseInt($("#fCntVal").textContent,10)||1)+1; });
@@ -2365,7 +2354,7 @@ $("#btnSaveNext").addEventListener("click",()=>{
   if(!$("#fName").value.trim()){ toast("Please enter an item name","warn"); return; }
   $("#btnSaveItem").click();                 // saves the current item (and closes the sheet)
   if($("#itemScrim").classList.contains("on")) return;   // save was blocked (view-only etc.) -> stop
-  setTimeout(()=>{ openItemSheet(null); scanTarget="pantry"; openCamera("barcode"); }, 60);
+  setTimeout(()=>{ openItemSheet(null); chainDate=true; scanTarget="pantry"; openCamera("barcode"); }, 60);
 });
 $("#btnMoveItem").addEventListener("click",()=>{ if(editingId){ moveItem(editingId); closeItemSheet(); } });
 $("#btnDeleteItem").addEventListener("click",()=>{
@@ -2407,11 +2396,13 @@ $("#btnSaveNote").addEventListener("click",()=>{
    ============================================================ */
 let pendingPhoto=null;
 let pendingBarcode=null;
+let chainDate=false;   // after a barcode scan, auto-open the expiry-date scanner
 let backupForId=null;
 function normName(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
 function sameNameItem(nm){ const t=normName(nm); return t?state.items.find(i=>normName(i.name)===t):null; }
 // Same product already here -> offer to keep it as a backup batch (or open the existing one).
 function offerDuplicate(existing){
+  chainDate=false;
   if(typeof closeCamera==="function") closeCamera();
   const code=pendingBarcode;
   const where=existing.location==="grocery"?"grocery list":"pantry";
@@ -2539,7 +2530,7 @@ async function startDateScan(){
 $("#camClose").addEventListener("click",closeCamera);
 $("#camCancel2").addEventListener("click",closeCamera);
 
-$("#qsBarcode").addEventListener("click",()=>{ scanTarget="pantry"; openCamera("barcode"); });
+$("#qsBarcode").addEventListener("click",()=>{ chainDate=true; scanTarget="pantry"; openCamera("barcode"); });
 $("#qsDate").addEventListener("click",()=>openCamera("date"));
 $("#chipGoogleImg").addEventListener("click",()=>{
   const q=$("#fName").value.trim(); if(!q){ toast("Type the item name first","warn"); return; }
@@ -2833,6 +2824,7 @@ function applyBarcodeResult(nm, catGuess, imgUrl){
   if(imgUrl){ pendingPhoto=imgUrl; showPhoto(pendingPhoto); }
   updateFreshInfo();
   toast("✓ Detected: "+nm,"good");
+  if(chainDate && !editingId && !backupForId){ chainDate=false; setTimeout(()=>{ if($("#itemScrim").classList.contains("on")) openCamera("date"); }, 500); }
 }
 // Find a product photo by name (Open Food Facts search). Name matching is approximate — user confirms by saving.
 async function findImageByName(){
@@ -2935,7 +2927,7 @@ async function geminiDate(dataUrl){
   toast("🔎 Reading date…","good");
   try{
     const iso=await geminiReadDate(dataUrl);
-    if(iso && plausibleExpiry(iso)){ $("#fExp").value=iso; if(typeof fillTypedFromExp==="function") fillTypedFromExp(); updateFreshInfo(); toast("📅 Read "+iso+" — double-check it's right","good"); return; }
+    if(iso && plausibleExpiry(iso)){ $("#fExp").value=iso; if(typeof fillSelectsFromExp==="function") fillSelectsFromExp(); updateFreshInfo(); toast("📅 Read "+iso+" — double-check it's right","good"); return; }
     // AI returned nothing usable -> try the on-device reader on the same photo
     return ocrDate(dataUrl);
   }catch(e){
@@ -2990,7 +2982,7 @@ async function ocrDate(imgs){
       const cand=parseDate(text);
       if(cand && plausibleExpiry(cand)){ iso=cand; break; }
     }
-    if(iso){ $("#fExp").value=iso; if(typeof fillTypedFromExp==="function") fillTypedFromExp(); updateFreshInfo(); toast("📅 Read "+iso+" — double-check it's right","good"); }
+    if(iso){ $("#fExp").value=iso; if(typeof fillSelectsFromExp==="function") fillSelectsFromExp(); updateFreshInfo(); toast("📅 Read "+iso+" — double-check it's right","good"); }
     else { toast("Couldn't read it clearly — tap the date field to pick it instead","warn"); }
   }catch(e){ toast("Scanner unavailable — tap the date field to pick it","warn"); }
 }
