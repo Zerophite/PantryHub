@@ -1884,7 +1884,7 @@ function itemCardHTML(it,mode,showCat){
     <div class="body" data-edit="${it.id}">
       <div class="nm">${escapeHtml(it.name)}</div>
       <div class="sub">${sub.join("")}</div>
-      ${pctInline||barHTML}
+      ${pctInline}
     </div>
     <div class="act">
       <div class="qstep"><button data-dec="${it.id}" title="Use one">−</button><span>${itemCount(it)}</span><button data-inc="${it.id}" title="Add one">+</button></div>
