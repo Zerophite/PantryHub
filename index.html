@@ -527,23 +527,23 @@ body.viewonly .vobadge{display:block}
       <div id="roleTag" style="font-size:13px;font-weight:700;margin-bottom:10px"></div>
       <div id="shareArea">
         <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;display:block;margin-bottom:6px">Share this pantry</label>
-        <div class="sub-hint" style="margin:0 0 8px">Send someone this code. They open the app, tap “Join with a code,” and they’re in — no sign-up.</div>
+        <div class="sub-hint" style="margin:0 0 8px">Share the code, or tap Share to send a join link. Recipients open the app, select “Join with a code,” and gain access instantly — no account required.</div>
         <div class="codebox"><span id="pantryCode">——————</span></div>
         <div style="display:flex;gap:8px;margin-top:8px">
           <button class="btn sec" id="btnCopyCode" style="margin:0">📋 Copy code</button>
           <button class="btn sec" id="btnShareCode" style="margin:0">🔗 Share</button>
         </div>
         <div class="cloudmsg" id="shareMsg"></div>
-        <div class="sub-hint" style="margin:8px 0 0">💡 Jot this code down somewhere safe — it’s your way back in if you ever switch phones or clear your browser.</div>
+        <div class="sub-hint" style="margin:8px 0 0">Store this code in a safe place. It restores access to this pantry if you change devices or clear your browser.</div>
         <label class="lockrow" id="lockRow" style="display:none">
-          <input type="checkbox" id="lockToggle"><span>Only I can make changes<br><small>Others with the code can still view, but can’t edit.</small></span>
+          <input type="checkbox" id="lockToggle"><span>Only I can make changes<br><small>People with the code can view the list, but not edit it.</small></span>
         </label>
       </div>
       <button class="btn ghost dzlink" id="btnAdvPantry" style="margin-top:6px">⚙️ Advanced…</button>
       <div id="advPantry" style="display:none;margin-top:6px">
-        <div class="sub-hint" style="margin:0 0 6px">This only hides the pantry on this device — the code keeps working and your data stays in the cloud.</div>
+        <div class="sub-hint" style="margin:0 0 6px">Removing it only hides the pantry on this device. The code keeps working, and your data stays safely in the cloud.</div>
         <button class="btn ghost" id="btnLeavePantry">🚪 Remove this pantry from this device</button>
-        <div class="sub-hint" style="margin:12px 0 4px">🆔 Your account ID — send this to the owner if they need to make you the owner:</div>
+        <div class="sub-hint" style="margin:12px 0 4px">Your account ID. Share this with the owner if they’d like to transfer ownership to you.</div>
         <div class="codebox" style="font-size:11px;word-break:break-all;text-align:left"><span id="myUid">—</span></div>
         <button class="btn sec" id="btnCopyUid" style="margin-top:6px">📋 Copy my account ID</button>
       </div>
@@ -551,7 +551,7 @@ body.viewonly .vobadge{display:block}
 
     <div class="setblock">
       <div class="setlabel">Categories</div>
-      <div class="sub-hint" style="margin:0 0 8px">Items are filed here automatically. Reorder with ▲▼. Adding, renaming, and removing categories is reserved for admins.</div>
+      <div class="sub-hint" style="margin:0 0 8px">Your items are sorted into these automatically. Use ▲▼ to arrange them in the order you prefer.</div>
       <div id="catList"></div>
       <div class="addcat" id="addCatRow">
         <input id="newCatIcon" maxlength="2" placeholder="auto" title="Leave blank to auto-pick an icon" style="flex:0 0 52px;text-align:center">
@@ -559,12 +559,12 @@ body.viewonly .vobadge{display:block}
         <button class="chip" id="btnAddCat" style="flex:0 0 auto">＋ Add</button>
       </div>
       <button class="btn sec" id="btnAutoSort" style="margin-top:10px">🔄 Auto-sort items into categories</button>
-      <div class="sub-hint" style="margin:6px 0 0">Re-files each item into its best-matching category by name, using only categories that already exist. Reversible under Backup &amp; data.</div>
+      <div class="sub-hint" style="margin:6px 0 0">Sorts every item into its best-matching category by name, using only the categories you already have. You can undo this under Backup &amp; data.</div>
     </div>
 
     <div class="setblock">
       <div class="setlabel">Backup &amp; data</div>
-      <div class="sub-hint" style="margin:0 0 8px">Your list lives only on this device. Export a backup before clearing your browser, or to move to another phone.</div>
+      <div class="sub-hint" style="margin:0 0 8px">Export your list as a file to keep a copy, or import one to restore it — useful before clearing your browser or moving to a new device.</div>
       <div class="btnrow">
         <button class="btn sec" id="btnExport">⬇️ Export backup</button>
         <button class="btn sec" id="btnImport">⬆️ Import backup</button>
@@ -586,7 +586,7 @@ body.viewonly .vobadge{display:block}
     <div class="setblock" id="adminBlock" style="display:none">
       <div class="setlabel">Admin</div>
       <div id="adminOut">
-        <div class="sub-hint" style="margin:0 0 8px">Unlock admin access with your code to manage the shared product database.</div>
+        <div class="sub-hint" style="margin:0 0 8px">Enter your admin code to help manage the shared product database.</div>
         <input id="adminCode" type="password" placeholder="Admin code" autocomplete="off" style="width:100%;margin-bottom:8px">
         <button class="btn" id="btnAdminUnlock" style="width:100%">🔓 Unlock admin</button>
       </div>
@@ -595,7 +595,8 @@ body.viewonly .vobadge{display:block}
         <button class="btn sec" id="btnAdminTest" style="width:100%;margin-bottom:8px">🧪 Test shared database connection</button>
         <button class="btn sec" id="btnAdminUsage" style="width:100%;margin-bottom:8px">📊 Check storage usage</button>
         <div class="sub-hint" id="usageOut" style="display:none;margin:0 0 8px"></div>
-        <button class="btn sec" id="btnAdminPublishAll" style="width:100%;margin-bottom:8px">📤 Publish my items to the shared database</button>
+        <button class="btn sec" id="btnAdminPublishAll" style="width:100%;margin-bottom:4px">📤 Re-publish all items</button>
+        <div class="sub-hint" style="margin:0 0 8px">A bulk sync of every barcoded item — rarely needed. Individual edits publish automatically when you Save.</div>
         <button class="btn sec" id="btnAdminUploadPhotos" style="width:100%;margin-bottom:8px">☁️ Upload my photos to the cloud (for shared viewers)</button>
         <button class="btn danger" id="btnAdminLogout" style="width:100%">🔒 Log out of admin</button>
       </div>
@@ -606,7 +607,7 @@ body.viewonly .vobadge{display:block}
       <button class="btn ghost dzlink" id="btnShowDanger">⚠️ Show danger zone…</button>
       <div id="dangerBox" style="display:none;margin-top:8px">
         <button class="btn danger" id="btnDeletePantry" style="display:none">🗑️ Delete this pantry permanently (for everyone)</button>
-        <div class="sub-hint" id="deletePantryHint" style="display:none;margin:6px 0 0">Only the owner can do this. It removes the pantry from the cloud for everyone who has the code — there's no undo.</div>
+        <div class="sub-hint" id="deletePantryHint" style="display:none;margin:6px 0 0">Only the owner can do this. It permanently removes the pantry from the cloud for everyone with the code, and cannot be undone.</div>
       </div>
     </div>
 
