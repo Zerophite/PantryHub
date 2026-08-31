@@ -229,6 +229,12 @@ body.viewonly .cathead .catadd{display:none}
 .photobox .pv{width:120px;height:120px;border-radius:12px;object-fit:cover;display:none}
 .chipbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .chip{padding:9px 12px;border-radius:11px;background:#eef2ea;font-weight:600;font-size:13px;color:var(--green-d);display:inline-flex;align-items:center;gap:6px}
+.dategrid{margin-bottom:8px}
+.dglabel{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.dgrow{display:flex;flex-wrap:wrap;gap:5px}
+.dgrow .dgb{padding:6px 9px;border:1px solid #e0e5dd;background:#f4f7f2;border-radius:8px;font-size:13px;font-weight:700;color:var(--ink);cursor:pointer;min-width:34px;text-align:center}
+.dgrow .dgb.on{background:var(--green);color:#fff;border-color:var(--green)}
+:root[data-theme="dark"] .dgrow .dgb{background:#222a24;border-color:#333;color:#cfe0d3}
 .pctchips{display:flex;gap:4px;margin-top:8px}
 .pctchips button{flex:1;padding:6px 0;border:1px solid #e0e5dd;background:#f4f7f2;border-radius:8px;font-size:12px;font-weight:800;color:var(--muted);cursor:pointer}
 .pctchips button.on{background:var(--green);color:#fff;border-color:var(--green)}
@@ -463,14 +469,12 @@ body.viewonly .vobadge{display:block}
 
     <div class="field">
       <label>Expiration date</label>
-      <div style="display:flex;gap:8px">
-        <select id="fExpMo" style="flex:1.4"><option value="">Month</option><option value="01">Jan · 01</option><option value="02">Feb · 02</option><option value="03">Mar · 03</option><option value="04">Apr · 04</option><option value="05">May · 05</option><option value="06">Jun · 06</option><option value="07">Jul · 07</option><option value="08">Aug · 08</option><option value="09">Sep · 09</option><option value="10">Oct · 10</option><option value="11">Nov · 11</option><option value="12">Dec · 12</option></select>
-        <select id="fExpDy" style="flex:0.9"><option value="">Day</option></select>
-        <select id="fExpYr" style="flex:1"><option value="">Year</option></select>
-      </div>
+      <div class="dategrid"><div class="dglabel">Month</div><div class="dgrow" id="fExpMo"></div></div>
+      <div class="dategrid"><div class="dglabel">Day</div><div class="dgrow" id="fExpDy"></div></div>
+      <div class="dategrid"><div class="dglabel">Year</div><div class="dgrow" id="fExpYr"></div></div>
       <input type="hidden" id="fExp">
     </div>
-    <div class="sub-hint" style="margin:2px 0 14px">Pick month, day and year — or tap “Scan expiry date” at the top. Leave blank if there's no date.</div>
+    <div class="sub-hint" style="margin:2px 0 14px">Tap a month, day and year — or tap “Scan expiry date” at the top. Leave blank if there's no date.</div>
 
     <div class="field">
       <label>Opened? (starts the freshness timer)</label>
@@ -487,7 +491,7 @@ body.viewonly .vobadge{display:block}
     </div>
 
     <button class="btn" id="btnSaveItem">Save Item</button>
-    <button class="btn sec" id="btnSaveNext" style="margin-top:8px">📷 Save &amp; scan next</button>
+    <button class="btn" id="btnSaveNext" style="margin-top:8px">✓ Save &amp; scan next item</button>
     <div class="btnrow" id="editExtraBtns" style="display:none">
       <button class="btn sec" id="btnMoveItem">Move to Grocery</button>
       <button class="btn danger" id="btnDeleteItem">Delete</button>
@@ -1858,7 +1862,7 @@ function itemCardHTML(it,mode,showCat){
   if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
 
   const barHTML=(it.percent!=null)?`<div class="bar ${pctClass(it.percent)}"><i style="width:${it.percent}%"></i></div>`:"";
-  const pctInline = usesCount(it) ? "" : `<div class="pctchips">`+[10,25,50,75,100].map(p=>`<button type="button" data-pct="${p}" data-pid="${it.id}" class="${it.percent===p?'on':''}">${p}</button>`).join("")+`</div>`;
+  const pctInline = usesCount(it) ? "" : `<div class="pctchips">`+[5,10,25,50,75,100].map(p=>`<button type="button" data-pct="${p}" data-pid="${it.id}" class="${it.percent===p?'on':''}">${p}</button>`).join("")+`</div>`;
 
   if(mode==="grocery"){
     return `<div class="item ${it.checked?'done':''}" data-id="${it.id}">
@@ -2214,7 +2218,7 @@ function openItemSheet(id){
   try{ $("#itemSheet").scrollTop=0; }catch(e){}
   itemScrim.classList.add("on");
 }
-function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; backupForId=null; chainDate=false; }
+function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; backupForId=null; chainDate=false; rapidMode=false; }
 
 $("#fabAdd").addEventListener("click",()=>{
   if(!requireEdit()) return;
@@ -2291,24 +2295,31 @@ function updateFreshInfo(){
   else { box.className=""; box.innerHTML=""; }
 }
 
-/* Expiry via three dropdowns (Month / Day / Year) */
+/* Expiry via tappable Month / Day / Year grids */
 (function(){
-  const dy=$("#fExpDy"), yr=$("#fExpYr");
-  if(dy && dy.options.length<=1){ for(let d=1;d<=31;d++){ const o=document.createElement("option"); o.value=String(d).padStart(2,"0"); o.textContent=d; dy.appendChild(o); } }
-  if(yr && yr.options.length<=1){ const y0=new Date().getFullYear(); for(let y=y0;y<=y0+10;y++){ const o=document.createElement("option"); o.value=String(y); o.textContent=y; yr.appendChild(o); } }
+  const MO=[["01","Jan"],["02","Feb"],["03","Mar"],["04","Apr"],["05","May"],["06","Jun"],["07","Jul"],["08","Aug"],["09","Sep"],["10","Oct"],["11","Nov"],["12","Dec"]];
+  const mo=$("#fExpMo"), dy=$("#fExpDy"), yr=$("#fExpYr");
+  if(mo && !mo.children.length){ mo.innerHTML=MO.map(function(x){return '<button type="button" class="dgb" data-mo="'+x[0]+'">'+x[1]+' '+x[0]+'</button>';}).join(""); }
+  if(dy && !dy.children.length){ var h=""; for(var d=1;d<=31;d++){ var v=String(d).padStart(2,"0"); h+='<button type="button" class="dgb" data-dy="'+v+'">'+d+'</button>'; } dy.innerHTML=h; }
+  if(yr && !yr.children.length){ var y0=new Date().getFullYear(); var hy=""; for(var y=y0;y<=y0+10;y++){ hy+='<button type="button" class="dgb" data-yr="'+y+'">'+y+'</button>'; } yr.innerHTML=hy; }
 })();
-function syncExpFromSelects(){
-  const mo=$("#fExpMo").value, dd=$("#fExpDy").value, yy=$("#fExpYr").value;
-  let iso="";
-  if(mo&&dd&&yy){ const d=new Date(yy+"-"+mo+"-"+dd+"T00:00:00"); if(!isNaN(d) && (d.getMonth()+1)===parseInt(mo,10) && d.getDate()===parseInt(dd,10)) iso=yy+"-"+mo+"-"+dd; }
+function _selPart(cont,attr){ var el=cont&&cont.querySelector(".dgb.on"); return el?el.getAttribute(attr):""; }
+function recomputeExp(){
+  var m=_selPart($("#fExpMo"),"data-mo"), d=_selPart($("#fExpDy"),"data-dy"), y=_selPart($("#fExpYr"),"data-yr");
+  var iso="";
+  if(m&&d&&y){ var dt=new Date(y+"-"+m+"-"+d+"T00:00:00"); if(!isNaN(dt) && (dt.getMonth()+1)===parseInt(m,10) && dt.getDate()===parseInt(d,10)) iso=y+"-"+m+"-"+d; }
   $("#fExp").value=iso; updateFreshInfo();
 }
 function fillSelectsFromExp(){
-  const v=($("#fExp").value)||"";
-  if(/^\d{4}-\d{2}-\d{2}$/.test(v)){ const p=v.split("-"); $("#fExpYr").value=p[0]; $("#fExpMo").value=p[1]; $("#fExpDy").value=String(parseInt(p[2],10)).padStart(2,"0"); }
-  else { $("#fExpMo").value=""; $("#fExpDy").value=""; $("#fExpYr").value=""; }
+  var v=($("#fExp").value)||""; var ok=/^\d{4}-\d{2}-\d{2}$/.test(v); var p=ok?v.split("-"):["","",""];
+  [["#fExpMo","data-mo",p[1]],["#fExpDy","data-dy",p[2]],["#fExpYr","data-yr",p[0]]].forEach(function(t){
+    var cont=$(t[0]); if(!cont) return;
+    cont.querySelectorAll(".dgb").forEach(function(bn){ bn.classList.toggle("on", ok && bn.getAttribute(t[1])===t[2]); });
+  });
 }
-["fExpMo","fExpDy","fExpYr"].forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("change",syncExpFromSelects); });
+document.addEventListener("click",function(e){ var bn=e.target.closest && e.target.closest(".dgb"); if(!bn) return;
+  var row=bn.parentElement; row.querySelectorAll(".dgb.on").forEach(function(x){ x.classList.remove("on"); }); bn.classList.add("on"); recomputeExp();
+});
 $("#fByCount") && $("#fByCount").addEventListener("change",()=>{ const af=$("#amtField"); if(af) af.style.display=$("#fByCount").checked?"none":""; });
 $("#fCntMinus").addEventListener("click",()=>{ $("#fCntVal").textContent=Math.max(1,(parseInt($("#fCntVal").textContent,10)||1)-1); });
 $("#fCntPlus").addEventListener("click",()=>{ $("#fCntVal").textContent=(parseInt($("#fCntVal").textContent,10)||1)+1; });
@@ -2354,7 +2365,7 @@ $("#btnSaveNext").addEventListener("click",()=>{
   if(!$("#fName").value.trim()){ toast("Please enter an item name","warn"); return; }
   $("#btnSaveItem").click();                 // saves the current item (and closes the sheet)
   if($("#itemScrim").classList.contains("on")) return;   // save was blocked (view-only etc.) -> stop
-  setTimeout(()=>{ openItemSheet(null); chainDate=true; scanTarget="pantry"; openCamera("barcode"); }, 60);
+  setTimeout(()=>{ openItemSheet(null); chainDate=true; rapidMode=true; scanTarget="pantry"; openCamera("barcode"); }, 60);
 });
 $("#btnMoveItem").addEventListener("click",()=>{ if(editingId){ moveItem(editingId); closeItemSheet(); } });
 $("#btnDeleteItem").addEventListener("click",()=>{
@@ -2397,12 +2408,13 @@ $("#btnSaveNote").addEventListener("click",()=>{
 let pendingPhoto=null;
 let pendingBarcode=null;
 let chainDate=false;   // after a barcode scan, auto-open the expiry-date scanner
+let rapidMode=false;   // hands-free loop: barcode -> date -> auto-save -> next barcode
 let backupForId=null;
 function normName(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
 function sameNameItem(nm){ const t=normName(nm); return t?state.items.find(i=>normName(i.name)===t):null; }
 // Same product already here -> offer to keep it as a backup batch (or open the existing one).
 function offerDuplicate(existing){
-  chainDate=false;
+  chainDate=false; rapidMode=false;
   if(typeof closeCamera==="function") closeCamera();
   const code=pendingBarcode;
   const where=existing.location==="grocery"?"grocery list":"pantry";
@@ -2527,10 +2539,14 @@ async function startDateScan(){
     scanning=false;
   },1300);
 }
-$("#camClose").addEventListener("click",closeCamera);
-$("#camCancel2").addEventListener("click",closeCamera);
+function _camCloseSmart(){ const wr=rapidMode, dateStep=(camMode==="date"); closeCamera();
+  if(wr && dateStep){ toast("No date on the pack? Just tap Save & scan next","good"); return; }   // keep the loop; form stays filled
+  if(wr){ rapidMode=false; if(!$("#fName").value.trim()) closeItemSheet(); }
+}
+$("#camClose").addEventListener("click",_camCloseSmart);
+$("#camCancel2").addEventListener("click",_camCloseSmart);
 
-$("#qsBarcode").addEventListener("click",()=>{ chainDate=true; scanTarget="pantry"; openCamera("barcode"); });
+$("#qsBarcode").addEventListener("click",()=>{ rapidMode=true; chainDate=true; scanTarget="pantry"; openCamera("barcode"); });
 $("#qsDate").addEventListener("click",()=>openCamera("date"));
 $("#chipGoogleImg").addEventListener("click",()=>{
   const q=$("#fName").value.trim(); if(!q){ toast("Type the item name first","warn"); return; }
@@ -2824,7 +2840,7 @@ function applyBarcodeResult(nm, catGuess, imgUrl){
   if(imgUrl){ pendingPhoto=imgUrl; showPhoto(pendingPhoto); }
   updateFreshInfo();
   toast("✓ Detected: "+nm,"good");
-  if(chainDate && !editingId && !backupForId){ chainDate=false; setTimeout(()=>{ if($("#itemScrim").classList.contains("on")) openCamera("date"); }, 500); }
+  chainDate=false;
 }
 // Find a product photo by name (Open Food Facts search). Name matching is approximate — user confirms by saving.
 async function findImageByName(){
@@ -2858,6 +2874,12 @@ function guessCatFromOFF(tags){
 }
 
 // Shutter: photo capture, and for date -> OCR (grab a crisp + a gentle crop before closing)
+function rapidSaveAndNext(){
+  if(!$("#fName").value.trim()){ toast("Nothing to save — scan a barcode","warn"); return; }
+  $("#btnSaveItem").click();                              // saves + closes the sheet
+  if($("#itemScrim").classList.contains("on")) return;   // save was blocked
+  setTimeout(()=>{ openItemSheet(null); chainDate=true; rapidMode=true; scanTarget="pantry"; openCamera("barcode"); }, 90);
+}
 $("#camShutter").addEventListener("click",async()=>{
   if(camMode==="date"){
     if(window.GEMINI){
@@ -2868,6 +2890,10 @@ $("#camShutter").addEventListener("click",async()=>{
       const shots=[captureDateRegion(false),captureDateRegion(true)];
       closeCamera();
       await ocrDate(shots);
+    }
+    if(rapidMode){
+      if($("#fExp").value){ toast("✓ Saved — next item","good"); rapidSaveAndNext(); }
+      else { toast("Couldn't read the date — tap it below, then Save & scan next","warn"); }
     }
   }else{
     pendingPhoto=toThumb(camVideo,420,0.62); closeCamera(); showPhoto(pendingPhoto); toast("Photo captured","good");
