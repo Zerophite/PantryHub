@@ -1271,7 +1271,7 @@ function wholeSpiceSVG(name){
 }
 function itemThumb(it){
   const n=(it.name||"").toLowerCase();
-  if(it.photo==="L") return `<img class="lazyphoto" data-pid="${it.id}" alt="" src="">`;
+  if(it.photo==="L") return `<img class="lazyphoto" data-pid="${it.id}" data-bc="${it.barcode||''}" alt="" src="">`;
   if(it.photo) return `<img src="${it.photo}" alt="">`;
   if(/cheese sauce|liquid cheese|nacho cheese|cheese dip|cheese spread/.test(n)) return jarSVG("#f0a72e");
   if(/mozzarella|white cheese|string cheese/.test(n)) return cheeseWedgeSVG("#f7f3e6");
@@ -1576,8 +1576,23 @@ function photoDB(){ return _photoDB || (_photoDB=new Promise((res,rej)=>{ try{ c
 function idbPut(id,data){ return photoDB().then(db=>new Promise(res=>{ try{ const t=db.transaction("p","readwrite"); t.objectStore("p").put(data,id); t.oncomplete=()=>res(true); t.onerror=()=>res(false); }catch(e){ res(false); } })).catch(()=>false); }
 function idbGet(id){ return photoDB().then(db=>new Promise(res=>{ try{ const t=db.transaction("p","readonly"); const rq=t.objectStore("p").get(id); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); }catch(e){ res(null); } })).catch(()=>null); }
 function idbDel(id){ return photoDB().then(db=>new Promise(res=>{ try{ const t=db.transaction("p","readwrite"); t.objectStore("p").delete(id); t.oncomplete=()=>res(true); t.onerror=()=>res(false); }catch(e){ res(false); } })).catch(()=>false); }
-function setLocalPhoto(id,data){ if(!id) return; if(typeof data==="string" && data.startsWith("data:")){ _photoMem[id]=data; idbPut(id,data); } else { delete _photoMem[id]; idbDel(id); } }
-function hydratePhotos(){ try{ document.querySelectorAll("img.lazyphoto").forEach(img=>{ if(img.dataset.done) return; const id=img.dataset.pid; if(_photoMem[id]){ img.src=_photoMem[id]; img.dataset.done="1"; return; } idbGet(id).then(d=>{ if(d){ _photoMem[id]=d; img.src=d; } img.dataset.done="1"; }); }); }catch(e){} }
+function setLocalPhoto(id,data){ if(!id) return; if(typeof data==="string" && data.startsWith("data:")){ _photoMem[id]=data; idbPut(id,data); ensureCloudPhoto(id,data); } else { delete _photoMem[id]; idbDel(id); } }
+let _photoUp=null;
+function photoUpSet(){ if(_photoUp) return _photoUp; try{ _photoUp=new Set(JSON.parse(localStorage.getItem("pantry_photo_up")||"[]")); }catch(e){ _photoUp=new Set(); } return _photoUp; }
+function markPhotoUp(id){ const st=photoUpSet(); if(!st.has(id)){ st.add(id); try{ localStorage.setItem("pantry_photo_up", JSON.stringify([...st])); }catch(e){} } }
+function ensureCloudPhoto(id,data){ if(!id||!data||!window.Photos) return; if(typeof canEdit==="function" && !canEdit()) return; if(photoUpSet().has(id)) return; window.Photos.save(id,data).then(ok=>{ if(ok) markPhotoUp(id); }); }
+function hydratePhotos(){ try{ document.querySelectorAll("img.lazyphoto").forEach(img=>{ if(img.dataset.done) return; const id=img.dataset.pid;
+  if(_photoMem[id]){ img.src=_photoMem[id]; img.dataset.done="1"; return; }
+  idbGet(id).then(d=>{
+    if(d){ _photoMem[id]=d; img.src=d; img.dataset.done="1"; ensureCloudPhoto(id,d); return; }
+    const bc=img.dataset.bc;
+    const done=()=>{ img.dataset.done="1"; };
+    const cache=(p)=>{ _photoMem[id]=p; try{ idbPut(id,p); }catch(e){} img.src=p; };
+    const tryProducts=()=>{ if(bc && window.Products){ window.Products.get(bc).then(sp=>{ if(sp && typeof sp.photo==="string" && sp.photo.startsWith("data:")) cache(sp.photo); done(); }).catch(done); } else done(); };
+    if(window.Photos){ window.Photos.get(id).then(p=>{ if(typeof p==="string" && p.startsWith("data:")){ cache(p); done(); } else tryProducts(); }).catch(tryProducts); }
+    else tryProducts();
+  });
+}); }catch(e){} }
 // One-time: move any base64 photos (from state, the old localStorage store, and the products cache) into IndexedDB.
 function migratePhotos(){
   let ch=false;
@@ -3388,6 +3403,8 @@ if(window.CLOUD){
     // Skip the hub on launch: reopen the last pantry straight away (spinner stays up until it loads).
     if(!didAutoOpen){
       didAutoOpen=true;
+      const hj=(location.hash.match(/join=([A-Za-z0-9]+)/)||[])[1];
+      if(hj){ try{ history.replaceState(null,"",location.pathname+location.search); }catch(e){} showHub(); $("#joinCode").value=hj.toUpperCase(); joinByCode(); return; }
       const last=localStorage.getItem(LAST);
       if(last && getList().some(p=>p.code===last)){ openPantry(last); return; }
     }
@@ -3500,6 +3517,11 @@ if(window.CLOUD){
     async save(code,info){ try{ await setDoc(doc(db,"products",String(code)),{name:info.name||"",category:info.category||"",photo:info.photo||"",updatedAt:serverTimestamp()},{merge:true}); return true; }catch(e){ return false; } },
     async probe(){ try{ await setDoc(doc(db,"products","selftest"),{t:Date.now()},{merge:true}); return {ok:true, uid:uid}; }catch(e){ return {ok:false, error:(e&&e.code)||(e&&e.message)||String(e), uid:uid}; } }
   };
+  // Per-item photos, keyed by item id, so shared viewers see EVERY photo (barcode or not). Free Firestore.
+  window.Photos={
+    async get(id){ try{ const snap=await getDoc(doc(db,"itemphotos",String(id))); return snap.exists()?(snap.data().data||null):null; }catch(e){ return null; } },
+    async save(id,data){ try{ await setDoc(doc(db,"itemphotos",String(id)),{data:data,updatedAt:serverTimestamp()}); return true; }catch(e){ return false; } }
+  };
   async function flush(){
     if(!curId || !window.Sync.ready || !dirty) return;
     dirty=false; clearTimeout(pushTimer);
@@ -3538,7 +3560,8 @@ if(window.CLOUD){
     catch(e){ msg.className="cloudmsg"; msg.textContent="Your code is "+curId; }
   });
   $("#btnShareCode").addEventListener("click",async()=>{
-    const text=`Join my "${curData.name||'pantry'}" list — open the app, tap “Join with a code,” and enter: ${curId}`;
+    const url=location.origin+location.pathname+"#join="+curId;
+    const text=`Join my "${curData.name||'pantry'}" on PantryHub:\n${url}\n\n(or open the app → "Join with a code" → ${curId})`;
     try{ if(navigator.share){ await navigator.share({title:"Pantry code", text}); return; } }catch(e){ return; }
     try{ await navigator.clipboard.writeText(text); toast("Share text copied","ok"); }catch(e){ $("#shareMsg").textContent=text; }
   });
