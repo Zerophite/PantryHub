@@ -1580,11 +1580,11 @@ function photoDB(){ return _photoDB || (_photoDB=new Promise((res,rej)=>{ try{ c
 function idbPut(id,data){ return photoDB().then(db=>new Promise(res=>{ try{ const t=db.transaction("p","readwrite"); t.objectStore("p").put(data,id); t.oncomplete=()=>res(true); t.onerror=()=>res(false); }catch(e){ res(false); } })).catch(()=>false); }
 function idbGet(id){ return photoDB().then(db=>new Promise(res=>{ try{ const t=db.transaction("p","readonly"); const rq=t.objectStore("p").get(id); rq.onsuccess=()=>res(rq.result||null); rq.onerror=()=>res(null); }catch(e){ res(null); } })).catch(()=>null); }
 function idbDel(id){ return photoDB().then(db=>new Promise(res=>{ try{ const t=db.transaction("p","readwrite"); t.objectStore("p").delete(id); t.oncomplete=()=>res(true); t.onerror=()=>res(false); }catch(e){ res(false); } })).catch(()=>false); }
-function setLocalPhoto(id,data){ if(!id) return; if(typeof data==="string" && data.startsWith("data:")){ _photoMem[id]=data; idbPut(id,data); ensureCloudPhoto(id,data); } else { delete _photoMem[id]; idbDel(id); } }
+function setLocalPhoto(id,data){ if(!id) return; if(typeof data==="string" && data.startsWith("data:")){ _photoMem[id]=data; idbPut(id,data); ensureCloudPhoto(id,data,true); } else { delete _photoMem[id]; idbDel(id); } }
 let _photoUp=null;
 function photoUpSet(){ if(_photoUp) return _photoUp; try{ _photoUp=new Set(JSON.parse(localStorage.getItem("pantry_photo_up")||"[]")); }catch(e){ _photoUp=new Set(); } return _photoUp; }
 function markPhotoUp(id){ const st=photoUpSet(); if(!st.has(id)){ st.add(id); try{ localStorage.setItem("pantry_photo_up", JSON.stringify([...st])); }catch(e){} } }
-function ensureCloudPhoto(id,data){ if(!id||!data||!window.Photos) return; if(typeof canEdit==="function" && !canEdit()) return; if(photoUpSet().has(id)) return; window.Photos.save(id,data).then(ok=>{ if(ok) markPhotoUp(id); }); }
+function ensureCloudPhoto(id,data,force){ if(!id||!data||!window.Photos) return; if(typeof canEdit==="function" && !canEdit()) return; if(!force && photoUpSet().has(id)) return; window.Photos.save(id,data).then(ok=>{ if(ok) markPhotoUp(id); }); }
 function hydratePhotos(){ try{ document.querySelectorAll("img.lazyphoto").forEach(img=>{ if(img.dataset.done) return; const id=img.dataset.pid;
   if(_photoMem[id]){ img.src=_photoMem[id]; img.dataset.done="1"; return; }
   idbGet(id).then(d=>{
