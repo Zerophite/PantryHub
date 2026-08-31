@@ -229,6 +229,10 @@ body.viewonly .cathead .catadd{display:none}
 .photobox .pv{width:120px;height:120px;border-radius:12px;object-fit:cover;display:none}
 .chipbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
 .chip{padding:9px 12px;border-radius:11px;background:#eef2ea;font-weight:600;font-size:13px;color:var(--green-d);display:inline-flex;align-items:center;gap:6px}
+.pctchips{display:flex;gap:4px;margin-top:8px}
+.pctchips button{flex:1;padding:6px 0;border:1px solid #e0e5dd;background:#f4f7f2;border-radius:8px;font-size:12px;font-weight:800;color:var(--muted);cursor:pointer}
+.pctchips button.on{background:var(--green);color:#fff;border-color:var(--green)}
+:root[data-theme="dark"] .pctchips button{background:#222a24;border-color:#333;color:#9fb3a3}
 .quickscan{display:flex;gap:10px;margin:4px 0 14px}
 .quickscan .qs{flex:1;padding:14px 8px;border-radius:14px;border:none;background:var(--green);color:#fff;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.12)}
 .quickscan .qs:active{transform:translateY(1px);opacity:.9}
@@ -432,7 +436,7 @@ body.viewonly .vobadge{display:block}
       <label class="vacrow"><input type="checkbox" id="fVac"> <span>🗜️ Vacuum sealed <em>(extends shelf life)</em></span></label>
     </div>
 
-    <div class="field">
+    <div class="field" id="amtField">
       <label>Amount left · <span id="pctLabel">100%</span></label>
       <div class="rng">
         <input type="range" id="fPct" min="0" max="100" step="5" value="100">
@@ -448,6 +452,9 @@ body.viewonly .vobadge{display:block}
         <button type="button" class="chip" id="fCntPlus" style="font-size:18px;padding:6px 16px">＋</button>
       </div>
     </div>
+    <div class="field">
+      <label class="vacrow"><input type="checkbox" id="fByCount"> <span>🔢 Count-only item — hide the % slider (e.g. eggs, cans)</span></label>
+    </div>
 
     <div class="field">
       <label>Description (optional)</label>
@@ -458,6 +465,17 @@ body.viewonly .vobadge{display:block}
       <div class="field">
         <label>Expiration date</label>
         <input id="fExp" type="date">
+      </div>
+    </div>
+    <div class="field" style="margin-top:-4px">
+      <label style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">Quick set — from today</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button type="button" class="chip expquick" data-exp="7">+1 wk</button>
+        <button type="button" class="chip expquick" data-exp="30">+1 mo</button>
+        <button type="button" class="chip expquick" data-exp="90">+3 mo</button>
+        <button type="button" class="chip expquick" data-exp="180">+6 mo</button>
+        <button type="button" class="chip expquick" data-exp="365">+1 yr</button>
+        <button type="button" class="chip expquick" data-exp="730">+2 yr</button>
       </div>
     </div>
     <div class="field" style="margin-top:-6px">
@@ -1403,6 +1421,77 @@ const FRESH=[
   [["liquid smoke"],{fridge:730,freezer:730,pantry:730}],
   // gelatin/agar powder: essentially indefinite when dry
   [["gelatin","gelatine","jello","gulaman","agar agar","agar-agar","unflavored gelatin","unflavoured gelatin"],{fridge:1095,freezer:1095,pantry:1095}],
+  // === Expanded coverage — research-aligned (USDA FoodKeeper / StillTasty). Specifics placed BEFORE broad matches. ===
+  // -- Dairy (must beat generic milk/cream/cheese below) --
+  [["powdered milk","milk powder","dry milk","instant milk"],{fridge:0,freezer:0,pantry:365}],
+  [["sour cream"],{fridge:21,freezer:0,pantry:1}],
+  [["cottage cheese","ricotta"],{fridge:10,freezer:0,pantry:1}],
+  [["heavy cream","whipping cream","whipped cream","half and half","half-and-half"],{fridge:10,freezer:120,pantry:1}],
+  [["margarine"],{fridge:120,freezer:240,pantry:5}],
+  [["buttermilk"],{fridge:14,freezer:90,pantry:1}],
+  [["parmesan","romano","hard cheese","aged cheese"],{fridge:42,freezer:180,pantry:1}],
+  [["feta"],{fridge:7,freezer:0,pantry:1}],
+  // -- Protein (fresh raw; timer from purchase) --
+  [["deli meat","lunch meat","sliced ham","cold cut","sliced turkey","sliced chicken","deli"],{fridge:5,freezer:60,pantry:1}],
+  [["ham"],{fridge:7,freezer:60,pantry:1}],
+  [["crab","lobster"],{fridge:3,freezer:180,pantry:0}],
+  [["scallop","clam","mussel"],{fridge:2,freezer:90,pantry:0}],
+  [["turkey","duck"],{fridge:2,freezer:180,pantry:0}],
+  [["liver","kidney","tripe","offal"],{fridge:2,freezer:120,pantry:0}],
+  // -- Produce (fresh; timer from purchase) --
+  [["celery"],{fridge:14,freezer:0,pantry:2}],
+  [["cucumber"],{fridge:7,freezer:0,pantry:3}],
+  [["zucchini","eggplant","aubergine"],{fridge:7,freezer:180,pantry:3}],
+  [["avocado"],{fridge:5,freezer:0,pantry:4}],
+  [["grape","grapes"],{fridge:14,freezer:300,pantry:3}],
+  [["strawberr","blueberr","raspberr","blackberr"],{fridge:5,freezer:300,pantry:1}],
+  [["pineapple"],{fridge:5,freezer:180,pantry:3}],
+  [["watermelon","cantaloupe","honeydew","melon"],{fridge:7,freezer:180,pantry:5}],
+  [["peach","nectarine","plum","apricot"],{fridge:5,freezer:180,pantry:4}],
+  [["pear"],{fridge:21,freezer:180,pantry:5}],
+  [["cherry","cherries"],{fridge:7,freezer:300,pantry:2}],
+  [["grapefruit"],{fridge:21,freezer:120,pantry:10}],
+  [["orange juice","apple juice"],{fridge:7,freezer:0,pantry:1}],
+  [["orange","oranges","mandarin","tangerine","clementine"],{fridge:21,freezer:120,pantry:10}],
+  [["kale","arugula","swiss chard","collard"],{fridge:5,freezer:240,pantry:1}],
+  [["cilantro","parsley","fresh basil","fresh mint","fresh herb"],{fridge:7,freezer:120,pantry:1}],
+  [["corn on the cob","fresh corn","sweet corn cob"],{fridge:5,freezer:240,pantry:1}],
+  [["green pea","snap pea","snow pea","fresh pea"],{fridge:5,freezer:300,pantry:1}],
+  [["green bean","string bean","long bean"],{fridge:7,freezer:300,pantry:2}],
+  [["cauliflower"],{fridge:6,freezer:240,pantry:1}],
+  [["beetroot","radish","turnip","parsnip"],{fridge:14,freezer:240,pantry:3}],
+  [["sweet potato","yam"],{fridge:0,freezer:240,pantry:21}],
+  // -- Condiments / sauces (after opening) --
+  [["salad dressing","ranch dressing","vinaigrette","caesar dressing","italian dressing","thousand island"],{fridge:60,freezer:0,pantry:1}],
+  [["teriyaki"],{fridge:365,freezer:0,pantry:60}],
+  [["relish"],{fridge:240,freezer:0,pantry:14}],
+  [["horseradish","wasabi"],{fridge:120,freezer:0,pantry:14}],
+  [["tahini"],{fridge:180,freezer:0,pantry:120}],
+  [["nutella","chocolate spread","hazelnut spread"],{fridge:0,freezer:0,pantry:180}],
+  [["salsa","picante"],{fridge:14,freezer:90,pantry:1}],
+  [["applesauce","apple sauce"],{fridge:10,freezer:60,pantry:1}],
+  // -- Dry / baking --
+  [["yeast"],{fridge:120,freezer:365,pantry:1}],
+  [["vanilla extract","vanilla"],{fridge:0,freezer:0,pantry:1460}],
+  [["chocolate chip","cocoa powder"],{fridge:0,freezer:0,pantry:365}],
+  [["cornmeal"],{fridge:365,freezer:365,pantry:180}],
+  [["breadcrumb","panko"],{fridge:0,freezer:180,pantry:180}],
+  [["cereal"],{fridge:0,freezer:0,pantry:120}],
+  [["cracker","crackers"],{fridge:0,freezer:0,pantry:90}],
+  [["popcorn kernel","popping corn"],{fridge:0,freezer:0,pantry:365}],
+  // -- Snacks / nuts --
+  [["almonds","cashews","walnut","pecan","pistachio","mixed nuts","peanuts"],{fridge:365,freezer:365,pantry:180}],
+  [["potato chip","tortilla chip","corn chip","kettle chip","crisps","potato crisp"],{fridge:0,freezer:0,pantry:21}],
+  [["chocolate bar","candy bar","chocolate"],{fridge:0,freezer:0,pantry:365}],
+  [["dried date","dried apricot","dried fig","prunes","cranberr","raisin","dried fruit","dried cranberr","sultana"],{fridge:180,freezer:365,pantry:180}],
+  // -- Beverages --
+  [["tea bag","green tea","black tea","herbal tea"],{fridge:0,freezer:0,pantry:730}],
+  [["soda","soft drink","cola","sparkling water"],{fridge:3,freezer:0,pantry:120}],
+  // -- Frozen --
+  [["frozen vegetable","frozen veg","frozen pea","frozen corn","frozen broccoli","frozen spinach"],{fridge:2,freezer:300,pantry:0}],
+  [["frozen fruit","frozen berry"],{fridge:1,freezer:300,pantry:0}],
+  [["ice cream","gelato","sorbet","frozen yogurt"],{fridge:0,freezer:60,pantry:0}],
+  [["frozen meal","frozen dinner","frozen pizza","frozen waffle","frozen nugget"],{fridge:1,freezer:180,pantry:0}],
   // --- Dairy ---
   [["evaporated","condensed milk","sweetened condensed"],{fridge:5,freezer:0,pantry:1}],
   [["coconut milk","coconut cream"],{fridge:6,freezer:30,pantry:1}],
@@ -1456,6 +1545,7 @@ const FRESH=[
   [["soy sauce","kikkoman","dark soy","light soy"],{fridge:365,freezer:0,pantry:180}],
   [["sriracha","hot sauce","franks","chili sauce","tabasco"],{fridge:365,freezer:0,pantry:180}],
   [["worcestershire","liquid smoke","liquid seasoning","maggi","knorr"],{fridge:365,freezer:0,pantry:365}],
+  [["curry paste","red curry","green curry paste","yellow curry paste"],{fridge:120,freezer:180,pantry:14}],
   [["gochujang","miso","bean paste","curry paste","shio koji","tomato paste tube"],{fridge:365,freezer:0,pantry:14}],
   [["tomato paste","tomato sauce"],{fridge:6,freezer:90,pantry:1}],
   [["pasta sauce","spaghetti sauce","pesto","salsa"],{fridge:5,freezer:90,pantry:1}],
@@ -1759,6 +1849,8 @@ function itemMatchesSearch(it){
 function itemCount(it){ return (it && it.count!=null && it.count>0) ? it.count : 1; }
 function migrateCount(){ let ch=false; (state.items||[]).forEach(it=>{ if(it.count==null){ it.count=1+((it.backups&&it.backups.length)?it.backups.length:0); ch=true; } if(it.backups){ delete it.backups; ch=true; } }); return ch; }
 function pctClass(p){ if(p==null) return ""; if(p<=25) return "low"; if(p<=60) return "mid"; return ""; }
+function usesCount(it){ if(it && it.byCount!=null) return !!it.byCount; const n=((it&&it.name)||"").toLowerCase(); return /\begg\b|eggs\b|\bdozen\b/.test(n); }
+function setPct(id,p){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; it.percent=p; if(it.location==="grocery"&&p>25){ it.location="pantry"; it.checked=false; } save(); renderAll(); }
 
 function itemCardHTML(it,mode,showCat){
   const fs=freshStatus(it);
@@ -1774,6 +1866,7 @@ function itemCardHTML(it,mode,showCat){
   if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
 
   const barHTML=(it.percent!=null)?`<div class="bar ${pctClass(it.percent)}"><i style="width:${it.percent}%"></i></div>`:"";
+  const pctInline = usesCount(it) ? "" : `<div class="pctchips">`+[10,25,50,75,100].map(p=>`<button type="button" data-pct="${p}" data-pid="${it.id}" class="${it.percent===p?'on':''}">${p}</button>`).join("")+`</div>`;
 
   if(mode==="grocery"){
     return `<div class="item ${it.checked?'done':''}" data-id="${it.id}">
@@ -1791,7 +1884,7 @@ function itemCardHTML(it,mode,showCat){
     <div class="body" data-edit="${it.id}">
       <div class="nm">${escapeHtml(it.name)}</div>
       <div class="sub">${sub.join("")}</div>
-      ${barHTML}
+      ${pctInline||barHTML}
     </div>
     <div class="act">
       <div class="qstep"><button data-dec="${it.id}" title="Use one">−</button><span>${itemCount(it)}</span><button data-inc="${it.id}" title="Add one">+</button></div>
@@ -1957,6 +2050,8 @@ document.addEventListener("click",e=>{
   if(sfilt){ const f=sfilt.dataset.storefilter; storeFilter=(f==="all"||storeFilter===f)?null:f; renderPantry(); return; }
   const openb=e.target.closest("[data-open]");
   if(openb){ markOpened(openb.dataset.open); return; }
+  const pc=e.target.closest("[data-pct]");
+  if(pc){ setPct(pc.dataset.pid, parseInt(pc.dataset.pct,10)); return; }
   const nb=e.target.closest("[data-newbatch]");
   if(nb){ newBatch(nb.dataset.newbatch); return; }
   const incb=e.target.closest("[data-inc]");
@@ -2109,6 +2204,7 @@ function openItemSheet(id){
   if(typeof fillTypedFromExp==="function") fillTypedFromExp();
   $("#fOpen").value=it?(it.opened||""):"";
   $("#fVac").checked=!!(it&&it.vac);
+  { const bc=$("#fByCount"); if(bc){ bc.checked = it ? usesCount(it) : false; } const af=$("#amtField"); if(af) af.style.display = (it?usesCount(it):false) ? "none" : ""; }
   $("#fNote").value=it?it.note:"";
   setStore(it?it.store:"pantry");
   updatePct();
@@ -2218,6 +2314,13 @@ function fillTypedFromExp(){
 }
 ["fExpM","fExpD","fExpY"].forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("input",syncExpFromTyped); });
 $("#fExp").addEventListener("change",fillTypedFromExp);
+document.addEventListener("click",e=>{ const q=e.target.closest(".expquick"); if(!q) return;
+  const days=parseInt(q.dataset.exp,10)||0; const d=new Date(); d.setDate(d.getDate()+days);
+  const iso=d.toISOString().slice(0,10); $("#fExp").value=iso;
+  if(typeof fillTypedFromExp==="function") fillTypedFromExp(); updateFreshInfo();
+  toast("📅 Best-before set to "+iso,"good");
+});
+$("#fByCount") && $("#fByCount").addEventListener("change",()=>{ const af=$("#amtField"); if(af) af.style.display=$("#fByCount").checked?"none":""; });
 $("#fCntMinus").addEventListener("click",()=>{ $("#fCntVal").textContent=Math.max(1,(parseInt($("#fCntVal").textContent,10)||1)-1); });
 $("#fCntPlus").addEventListener("click",()=>{ $("#fCntVal").textContent=(parseInt($("#fCntVal").textContent,10)||1)+1; });
 $("#btnSaveItem").addEventListener("click",()=>{
@@ -2228,7 +2331,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
     name, category:$("#fCat").value,
     percent: parseInt($("#fPct").value,10),
     qty:$("#fQty").value.trim(), count:Math.max(1,parseInt($("#fCntVal").textContent,10)||1), exp:$("#fExp").value||null, opened:$("#fOpen").value||null,
-    store:storeVal, vac:$("#fVac").checked, note:$("#fNote").value.trim(), photo:pendingPhoto||null,
+    store:storeVal, vac:$("#fVac").checked, byCount:$("#fByCount")?$("#fByCount").checked:false, note:$("#fNote").value.trim(), photo:pendingPhoto||null,
   };
   if(backupForId){
     const host=getItem(backupForId);
