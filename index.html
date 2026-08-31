@@ -460,7 +460,17 @@ body.viewonly .vobadge{display:block}
         <input id="fExp" type="date">
       </div>
     </div>
-    <div class="sub-hint" style="margin:-8px 0 14px">Tap the date field to pick it (most reliable). “Try scan” reads the printed date on the label — handy, but check it before saving.</div>
+    <div class="field" style="margin-top:-6px">
+      <label style="text-transform:none;letter-spacing:0;font-size:12px;color:var(--muted)">…or type it — MM / DD / YYYY</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="fExpM" inputmode="numeric" maxlength="2" placeholder="MM" style="width:64px;text-align:center">
+        <span style="color:var(--muted);font-weight:800">/</span>
+        <input id="fExpD" inputmode="numeric" maxlength="2" placeholder="DD" style="width:64px;text-align:center">
+        <span style="color:var(--muted);font-weight:800">/</span>
+        <input id="fExpY" inputmode="numeric" maxlength="4" placeholder="YYYY" style="width:86px;text-align:center">
+      </div>
+    </div>
+    <div class="sub-hint" style="margin:2px 0 14px">Use the picker, type it above (e.g. 12 = December), or tap “Scan expiry date” at the top.</div>
 
     <div class="field">
       <label>Opened? (starts the freshness timer)</label>
@@ -2096,6 +2106,7 @@ function openItemSheet(id){
   $("#fQty").value=it?it.qty:"";
   $("#fCntVal").textContent=it?itemCount(it):1;
   $("#fExp").value=it?(it.exp||""):"";
+  if(typeof fillTypedFromExp==="function") fillTypedFromExp();
   $("#fOpen").value=it?(it.opened||""):"";
   $("#fVac").checked=!!(it&&it.vac);
   $("#fNote").value=it?it.note:"";
@@ -2192,6 +2203,21 @@ function updateFreshInfo(){
   else { box.className=""; box.innerHTML=""; }
 }
 
+function syncExpFromTyped(){
+  const mm=parseInt($("#fExpM").value,10), dd=parseInt($("#fExpD").value,10), yy=parseInt($("#fExpY").value,10);
+  if(mm>=1&&mm<=12 && dd>=1&&dd<=31 && yy>=2000&&yy<=2100){
+    const iso=yy+"-"+String(mm).padStart(2,"0")+"-"+String(dd).padStart(2,"0");
+    const d=new Date(iso+"T00:00:00");
+    if(!isNaN(d) && d.getMonth()+1===mm && d.getDate()===dd){ $("#fExp").value=iso; updateFreshInfo(); }
+  }
+}
+function fillTypedFromExp(){
+  const v=($("#fExp").value)||"";
+  if(/^\d{4}-\d{2}-\d{2}$/.test(v)){ const p=v.split("-"); $("#fExpY").value=p[0]; $("#fExpM").value=p[1]; $("#fExpD").value=p[2]; }
+  else { $("#fExpM").value=""; $("#fExpD").value=""; $("#fExpY").value=""; }
+}
+["fExpM","fExpD","fExpY"].forEach(id=>{ const el=$("#"+id); if(el) el.addEventListener("input",syncExpFromTyped); });
+$("#fExp").addEventListener("change",fillTypedFromExp);
 $("#fCntMinus").addEventListener("click",()=>{ $("#fCntVal").textContent=Math.max(1,(parseInt($("#fCntVal").textContent,10)||1)-1); });
 $("#fCntPlus").addEventListener("click",()=>{ $("#fCntVal").textContent=(parseInt($("#fCntVal").textContent,10)||1)+1; });
 $("#btnSaveItem").addEventListener("click",()=>{
@@ -2687,7 +2713,8 @@ async function lookupBarcode(code){
       return;
     }
   }catch(e){}
-  toast(isAdmin()?"Not found — as admin: type the name, add a photo, then Save to add it to the shared database.":"Not in the database — type the name (and add a photo). I'll remember it next time.","warn");
+  const bf=$("#fBarcode"); if(bf && !bf.value.trim()) bf.value=code;   // fill the scanned number automatically
+  toast(isAdmin()?"Not in the database — its barcode is filled in. Type the name + add a photo, then Save to share it.":"Not in the database — its barcode is filled in. Type the name (and add a photo) and Save; I'll remember it.","warn");
 }
 // Fill the add-item form from a barcode result
 function applyBarcodeResult(nm, catGuess, imgUrl){
@@ -2805,10 +2832,15 @@ async function geminiDate(dataUrl){
   toast("🔎 Reading date…","good");
   try{
     const iso=await geminiReadDate(dataUrl);
-    if(iso && plausibleExpiry(iso)){ $("#fExp").value=iso; updateFreshInfo(); toast("📅 Read "+iso+" — double-check it's right","good"); }
-    else if(iso){ toast("Read "+iso+" but that looks off — tap the field to pick it","warn"); }
-    else { toast("Couldn't find a date — tap the field to pick it","warn"); }
-  }catch(e){ toast("AI read failed ("+(e&&e.message||"error")+") — tap the field to pick it","warn"); }
+    if(iso && plausibleExpiry(iso)){ $("#fExp").value=iso; if(typeof fillTypedFromExp==="function") fillTypedFromExp(); updateFreshInfo(); toast("📅 Read "+iso+" — double-check it's right","good"); return; }
+    // AI returned nothing usable -> try the on-device reader on the same photo
+    return ocrDate(dataUrl);
+  }catch(e){
+    // AI unavailable (out of quota / offline) -> fall back to on-device reading
+    const q=/quota|billing|exceeded|429/i.test((e&&e.message)||"");
+    toast(q?"AI daily limit reached — reading on-device…":"AI unavailable — reading on-device…","good");
+    return ocrDate(dataUrl);
+  }
 }
 /* ----- OCR expiry date via Tesseract.js (lazy CDN load + a warm, reused worker) ----- */
 let tessLoaded=false;
@@ -2855,7 +2887,7 @@ async function ocrDate(imgs){
       const cand=parseDate(text);
       if(cand && plausibleExpiry(cand)){ iso=cand; break; }
     }
-    if(iso){ $("#fExp").value=iso; updateFreshInfo(); toast("📅 Read "+iso+" — double-check it's right","good"); }
+    if(iso){ $("#fExp").value=iso; if(typeof fillTypedFromExp==="function") fillTypedFromExp(); updateFreshInfo(); toast("📅 Read "+iso+" — double-check it's right","good"); }
     else { toast("Couldn't read it clearly — tap the date field to pick it instead","warn"); }
   }catch(e){ toast("Scanner unavailable — tap the date field to pick it","warn"); }
 }
