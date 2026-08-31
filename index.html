@@ -596,6 +596,7 @@ body.viewonly .vobadge{display:block}
         <button class="btn sec" id="btnAdminUsage" style="width:100%;margin-bottom:8px">📊 Check storage usage</button>
         <div class="sub-hint" id="usageOut" style="display:none;margin:0 0 8px"></div>
         <button class="btn sec" id="btnAdminPublishAll" style="width:100%;margin-bottom:8px">📤 Publish my items to the shared database</button>
+        <button class="btn sec" id="btnAdminUploadPhotos" style="width:100%;margin-bottom:8px">☁️ Upload my photos to the cloud (for shared viewers)</button>
         <button class="btn danger" id="btnAdminLogout" style="width:100%">🔒 Log out of admin</button>
       </div>
     </div>
@@ -3255,8 +3256,23 @@ $("#btnAdminPublishAll").addEventListener("click",async()=>{
   if(!confirm("Publish "+withBc.length+" of your items (the ones with a barcode) to the shared database?\n\nIt shares each one's current name, category, and photo with everyone — so make sure those are correct first.")) return;
   toast("Publishing "+withBc.length+" item(s)…","good");
   let ok=0, fail=0;
-  for(const it of withBc){ const r=await window.Products.save(it.barcode,{name:it.name,category:it.category,photo:it.photo||null}); if(r) ok++; else fail++; }
+  for(const it of withBc){ let ph=it.photo; if(ph==="L"){ ph=_photoMem[it.id]||await idbGet(it.id)||null; } const r=await window.Products.save(it.barcode,{name:it.name,category:it.category,photo:ph||null}); if(r) ok++; else fail++; }
   alert("Done — published "+ok+" item(s)"+(fail?(", "+fail+" failed"):"")+" to the shared database.");
+});
+$("#btnAdminUploadPhotos").addEventListener("click",async()=>{
+  if(!window.Photos){ alert("Open a cloud pantry first."); return; }
+  const withPhoto=state.items.filter(i=>i.photo==="L");
+  if(!withPhoto.length){ alert("No stored photos to upload yet.\n\n(Photos show as blank for shared viewers only if this pantry has custom images. Add one, then upload.)"); return; }
+  toast("Uploading "+withPhoto.length+" photo(s)…","good");
+  let ok=0, fail=0, missing=0;
+  for(const it of withPhoto){
+    let data=_photoMem[it.id]; if(!data) data=await idbGet(it.id);
+    if(!data){ missing++; continue; }
+    const r=await window.Photos.save(it.id,data);
+    if(r){ ok++; markPhotoUp(it.id); } else fail++;
+  }
+  if(fail && !ok){ alert("❌ Upload FAILED for all photos.\n\nThe 'itemphotos' Firestore rule is probably missing or not published. In Firebase → Firestore → Rules, add inside your documents block:\n\nmatch /itemphotos/{id} {\n  allow read: if request.auth != null;\n  allow write: if request.auth != null;\n}\n\nthen click PUBLISH and try again."); return; }
+  alert("☁️ Uploaded "+ok+" photo(s)"+(fail?(", "+fail+" failed"):"")+(missing?(", "+missing+" had no local image"):"")+".\n\nYour shared viewers should see them now — have them reopen the app.");
 });
 $("#btnAdminLogout").addEventListener("click",()=>{ try{ localStorage.removeItem("pantry_admin"); }catch(e){} updateAdminState(); toast("🔒 Logged out of admin","good"); });
 let _usageChecked=false;
