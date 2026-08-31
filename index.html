@@ -477,6 +477,7 @@ body.viewonly .vobadge{display:block}
     </div>
 
     <button class="btn" id="btnSaveItem">Save Item</button>
+    <button class="btn sec" id="btnSaveNext" style="margin-top:8px">📷 Save &amp; scan next</button>
     <div class="btnrow" id="editExtraBtns" style="display:none">
       <button class="btn sec" id="btnMoveItem">Move to Grocery</button>
       <button class="btn danger" id="btnDeleteItem">Delete</button>
@@ -2105,6 +2106,7 @@ function openItemSheet(id){
   showPhoto(pendingPhoto);
   $("#autoCatTag").textContent="";
   $("#editExtraBtns").style.display=it?"flex":"none";
+  { const bn=$("#btnSaveNext"); if(bn) bn.style.display=it?"none":""; }
   $("#btnMoveItem").textContent = it&&it.location==="pantry" ? "Move to Grocery" : "Move to Pantry";
   updateFreshInfo();
   { const g=$("#chipGoogleImg"); if(g) g.style.display=isAdmin()?"":"none"; }
@@ -2227,6 +2229,12 @@ $("#btnSaveItem").addEventListener("click",()=>{
   { const _t = editingId ? getItem(editingId) : state.items[state.items.length-1]; if(_t && typeof _t.photo==="string" && _t.photo.startsWith("data:")){ setLocalPhoto(_t.id,_t.photo); _t.photo="L"; } }
   learnCat(data.name, data.category); lastCat=data.category;        // remember the user's own preference
   save(); renderAll(); closeItemSheet();
+});
+$("#btnSaveNext").addEventListener("click",()=>{
+  if(!$("#fName").value.trim()){ toast("Please enter an item name","warn"); return; }
+  $("#btnSaveItem").click();                 // saves the current item (and closes the sheet)
+  if($("#itemScrim").classList.contains("on")) return;   // save was blocked (view-only etc.) -> stop
+  setTimeout(()=>{ openItemSheet(null); scanTarget="pantry"; openCamera("barcode"); }, 60);
 });
 $("#btnMoveItem").addEventListener("click",()=>{ if(editingId){ moveItem(editingId); closeItemSheet(); } });
 $("#btnDeleteItem").addEventListener("click",()=>{
