@@ -592,6 +592,8 @@ body.viewonly .vobadge{display:block}
       <div id="adminIn" style="display:none">
         <div class="sub-hint" style="margin:0 0 10px;color:var(--green-d)">✅ <b>Admin mode active.</b> Items you save that have a barcode are added to the shared product database.</div>
         <button class="btn sec" id="btnAdminTest" style="width:100%;margin-bottom:8px">🧪 Test shared database connection</button>
+        <button class="btn sec" id="btnAdminUsage" style="width:100%;margin-bottom:8px">📊 Check storage usage</button>
+        <div class="sub-hint" id="usageOut" style="display:none;margin:0 0 8px"></div>
         <button class="btn sec" id="btnAdminPublishAll" style="width:100%;margin-bottom:8px">📤 Publish my items to the shared database</button>
         <button class="btn danger" id="btnAdminLogout" style="width:100%">🔒 Log out of admin</button>
       </div>
@@ -3249,6 +3251,31 @@ $("#btnAdminPublishAll").addEventListener("click",async()=>{
   alert("Done — published "+ok+" item(s)"+(fail?(", "+fail+" failed"):"")+" to the shared database.");
 });
 $("#btnAdminLogout").addEventListener("click",()=>{ try{ localStorage.removeItem("pantry_admin"); }catch(e){} updateAdminState(); toast("🔒 Logged out of admin","good"); });
+let _usageChecked=false;
+async function maybeWarnUsage(){
+  if(_usageChecked) return; _usageChecked=true;
+  if(!isAdmin() || !window.Usage) return;
+  let last=""; try{ last=localStorage.getItem("pantry_usage_day")||""; }catch(e){}
+  if(last===todayISO()) return;   // already checked today
+  try{ localStorage.setItem("pantry_usage_day", todayISO()); }catch(e){}
+  try{
+    const u=await window.Usage();
+    const mb=((u.photos||0)*0.055)+((u.products||0)*0.055)+((u.pantries||0)*0.06);
+    const pct=(mb/1024)*100;
+    if(pct>=80) toast("⚠️ Cloud storage ~"+pct.toFixed(0)+"% full ("+mb.toFixed(0)+" MB of ~1024). Clear old photos or upgrade soon.","warn");
+  }catch(e){}
+}
+$("#btnAdminUsage").addEventListener("click",async()=>{
+  if(!window.Usage){ toast("Open a cloud pantry first","warn"); return; }
+  toast("Checking storage…","good");
+  const u=await window.Usage();
+  const photos=u.photos||0, products=u.products||0, pantries=u.pantries||0;
+  const mb=(photos*0.055)+(products*0.055)+(pantries*0.06);   // rough: ~55KB per photo/product doc
+  const pct=Math.min(100,(mb/1024)*100);
+  const el=$("#usageOut"); if(el){ el.style.display="";
+    el.innerHTML="📊 <b>~"+mb.toFixed(1)+" MB</b> of ~1024 MB used ("+pct.toFixed(1)+"%)<br>"+photos+" photos · "+products+" shared products · "+pantries+" pantries<br><span style=\"color:var(--muted)\">Reads/writes reset daily; storage is the running total.</span>";
+  }
+});
 $("#btnAdminTest").addEventListener("click",async()=>{
   if(!window.Products || !window.Products.probe){ alert("❌ Not connected to the cloud database.\n\n'window.Products' is missing — this device isn't running an online pantry, or the latest code isn't deployed. Open a cloud pantry and make sure the newest index.html is live on GitHub."); return; }
   toast("Testing shared database…","good");
@@ -3356,7 +3383,7 @@ if(window.CLOUD){
   const V="10.12.0";
   const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`);
   const { getAuth, onAuthStateChanged, signInAnonymously } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`);
-  const { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
+  const { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, collection, getCountFromServer } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
 
   const app=initializeApp(window.FIREBASE_CONFIG);
   const auth=getAuth(app);
@@ -3502,6 +3529,7 @@ if(window.CLOUD){
       window.Sync.ready=(role!=="viewer");
       renameLocal(code, curData.name||"Pantry", owner);
       updateSettingsUI();
+      try{ if(typeof maybeWarnUsage==="function") setTimeout(maybeWarnUsage, 3000); }catch(e){}
       overlay.classList.remove("on");
     },err=>{ toast("Sync error: "+err.code,"bad"); showHub(); });
   }
@@ -3516,6 +3544,14 @@ if(window.CLOUD){
     async get(code){ try{ const snap=await getDoc(doc(db,"products",String(code))); return snap.exists()?snap.data():null; }catch(e){ return null; } },
     async save(code,info){ try{ await setDoc(doc(db,"products",String(code)),{name:info.name||"",category:info.category||"",photo:info.photo||"",updatedAt:serverTimestamp()},{merge:true}); return true; }catch(e){ return false; } },
     async probe(){ try{ await setDoc(doc(db,"products","selftest"),{t:Date.now()},{merge:true}); return {ok:true, uid:uid}; }catch(e){ return {ok:false, error:(e&&e.code)||(e&&e.message)||String(e), uid:uid}; } }
+  };
+  // Rough storage usage (document counts via cheap aggregate queries).
+  window.Usage=async ()=>{
+    const out={photos:null,products:null,pantries:null};
+    try{ out.photos=(await getCountFromServer(collection(db,"itemphotos"))).data().count; }catch(e){}
+    try{ out.products=(await getCountFromServer(collection(db,"products"))).data().count; }catch(e){}
+    try{ out.pantries=(await getCountFromServer(collection(db,"pantries"))).data().count; }catch(e){}
+    return out;
   };
   // Per-item photos, keyed by item id, so shared viewers see EVERY photo (barcode or not). Free Firestore.
   window.Photos={
