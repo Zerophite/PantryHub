@@ -1965,7 +1965,7 @@ function renderPantry(){
     const sorted=[...items].sort((a,b)=>createdOf(b)-createdOf(a));   // newest first
     html+=`<div class="card">`+sorted.map(i=>itemCardHTML(i,"pantry",true)).join("")+`</div>`;
   }
-  host.innerHTML=html;
+  host.innerHTML=html; hydratePhotos();
 }
 
 const GROC_SCAN_BAR='<button class="btn" id="btnGrocScan" style="margin:2px 0 14px;width:100%;font-size:16px">🛒 Grocery Scanner</button>';
@@ -1992,7 +1992,7 @@ function renderGrocery(){
     html+=`<div class="cathead"><span class="cico">✅</span><span class="cname" style="color:var(--muted)">In cart (${done.length})</span><span class="cline"></span></div>`;
     html+=`<div class="card">`+done.map(i=>itemCardHTML(i,"grocery")).join("")+`</div>`;
   }
-  host.innerHTML=html;
+  host.innerHTML=html; hydratePhotos();
 }
 
 function renderNotes(){
