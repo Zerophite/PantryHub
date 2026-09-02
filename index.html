@@ -271,6 +271,7 @@ body.viewonly .cathead .catadd{display:none}
 
 /* toast */
 #toast{position:fixed;left:50%;bottom:calc(150px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:80;display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none;width:92%;max-width:420px}
+body.sheet-up #toast{bottom:auto;top:calc(16px + env(safe-area-inset-top))}
 .toast{background:#20241f;color:#fff;padding:12px 16px;border-radius:12px;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.3);opacity:0;transform:translateY(10px);transition:.25s;display:flex;align-items:center;gap:10px;width:100%}
 .toast.show{opacity:1;transform:translateY(0)}
 .toast .tundo{pointer-events:auto;background:rgba(255,255,255,.22);color:#fff;border:none;border-radius:9px;padding:7px 14px;font-weight:800;font-size:13px;margin-left:auto;cursor:pointer}
@@ -293,6 +294,11 @@ body.viewonly .cathead .catadd{display:none}
 .summary .scard{flex:1;background:var(--card);border-radius:14px;box-shadow:var(--shadow);padding:12px;text-align:center;cursor:pointer;transition:.12s;border:2px solid transparent}
 .summary .scard:active{transform:scale(.96)}
 .summary .scard.on{border-color:var(--green-l);background:#f1f8e9}
+:root[data-theme="dark"] .summary .scard.on{background:#1e2a1f}
+:root[data-theme="dark"] .freshbox{background:#1e2a1f;color:#a9d6ac}
+:root[data-theme="dark"] .freshbox b{color:#c8e6c9}
+:root[data-theme="dark"] .freshbox.warn{background:#2a2410;color:#ffcc80}
+:root[data-theme="dark"] .freshbox.bad{background:#2a1414;color:#ef9a9a}
 .summary .snum{font-size:22px;font-weight:800;color:var(--green-d)}
 .storechips{display:flex;gap:6px;margin:0 4px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
 .storechips .sc{flex:1 0 auto;white-space:nowrap;background:var(--card);border:1.5px solid var(--line);border-radius:11px;padding:8px 11px;font-size:12.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:5px;justify-content:center}
@@ -442,7 +448,7 @@ body.viewonly .vobadge{display:block}
       <label class="vacrow"><input type="checkbox" id="fVac"> <span>🗜️ Vacuum sealed <em>(extends shelf life)</em></span></label>
     </div>
 
-    <div class="field" id="amtField">
+    <div class="field" id="amtField" style="display:none">
       <label>Amount left · <span id="pctLabel">100%</span></label>
       <div class="rng">
         <input type="range" id="fPct" min="0" max="100" step="5" value="100">
@@ -2200,7 +2206,7 @@ function openItemSheet(id){
   if(typeof fillSelectsFromExp==="function") fillSelectsFromExp();
   $("#fOpen").value=it?(it.opened||""):"";
   $("#fVac").checked=!!(it&&it.vac);
-  { const bc=$("#fByCount"); if(bc){ bc.checked = it ? usesCount(it) : false; } const af=$("#amtField"); if(af) af.style.display = (it?usesCount(it):false) ? "none" : ""; }
+  { const bc=$("#fByCount"); if(bc){ bc.checked = it ? usesCount(it) : false; } }
   $("#fNote").value=it?it.note:"";
   setStore(it?it.store:"pantry");
   updatePct();
@@ -2320,12 +2326,13 @@ function fillSelectsFromExp(){
 document.addEventListener("click",function(e){ var bn=e.target.closest && e.target.closest(".dgb"); if(!bn) return;
   var row=bn.parentElement; row.querySelectorAll(".dgb.on").forEach(function(x){ x.classList.remove("on"); }); bn.classList.add("on"); recomputeExp();
 });
-$("#fByCount") && $("#fByCount").addEventListener("change",()=>{ const af=$("#amtField"); if(af) af.style.display=$("#fByCount").checked?"none":""; });
+/* amount slider removed — percentage is set from the list chips now */
 $("#fCntMinus").addEventListener("click",()=>{ $("#fCntVal").textContent=Math.max(1,(parseInt($("#fCntVal").textContent,10)||1)-1); });
 $("#fCntPlus").addEventListener("click",()=>{ $("#fCntVal").textContent=(parseInt($("#fCntVal").textContent,10)||1)+1; });
+$("#fName").addEventListener("blur",()=>{ const v=$("#fName").value; if(v.trim()) $("#fName").value=titleCase(v); });
 $("#btnSaveItem").addEventListener("click",()=>{
   if(!requireEdit()) return;
-  const name=$("#fName").value.trim();
+  const name=titleCase($("#fName").value.trim());
   if(!name){ toast("Please enter an item name","warn"); return; }
   const data={
     name, category:$("#fCat").value,
@@ -3325,7 +3332,7 @@ function lockScroll(on){
 }
 (function(){
   let locked=false;
-  const sync=()=>{ const open=!!document.querySelector(".scrim.on"); if(open!==locked){ locked=open; lockScroll(open); } };
+  const sync=()=>{ const open=!!document.querySelector(".scrim.on"); document.body.classList.toggle("sheet-up", open); if(open!==locked){ locked=open; lockScroll(open); } };
   const mo=new MutationObserver(sync);
   document.querySelectorAll(".scrim").forEach(el=>mo.observe(el,{attributes:true,attributeFilter:["class"]}));
   sync();
