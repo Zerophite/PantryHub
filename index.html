@@ -158,6 +158,8 @@ body.viewonly .cathead .catadd{display:none}
 .check.done{background:var(--green-l);border-color:var(--green-l)}
 .item.done .nm{text-decoration:line-through;color:var(--muted)}
 .item.done .thumb{opacity:.5}
+.item.expired{background:#fff0f1;box-shadow:inset 4px 0 0 var(--red)}
+:root[data-theme="dark"] .item.expired{background:#2a1416}
 
 /* notes */
 .note{background:var(--card);border-radius:14px;box-shadow:var(--shadow);padding:14px;margin-bottom:10px;position:relative}
@@ -1863,6 +1865,21 @@ function freshStatus(item){
   else { level="ok"; label=left+"d left"; }
   return {useBy,daysLeft:left,label,level,source};
 }
+// Precise remaining time for the Expiring list: counts down to the END of the use-by day, so the
+// last day shows hours and the last hour shows minutes. Returns {ms,txt,expired} or null.
+function fineExpiry(it){
+  const f=freshStatus(it); if(!f) return null;
+  const dl=new Date(f.useBy+"T00:00:00"); dl.setDate(dl.getDate()+1);   // deadline = end of the use-by day
+  const ms=dl.getTime()-Date.now();
+  let txt, expired=false;
+  if(ms<0){ expired=true; const days=Math.floor(-ms/86400000); txt = days<=0 ? "⚠️ Expired today" : ("⚠️ Expired "+days+"d ago"); }
+  else { const mins=Math.floor(ms/60000), hrs=Math.floor(ms/3600000), days=Math.floor(ms/86400000);
+    if(mins<60) txt = mins<=1 ? "⏳ <1 min left" : ("⏳ "+mins+" min left");
+    else if(hrs<24) txt = "⏳ "+hrs+"h left";
+    else txt = "⏳ "+days+"d left";
+  }
+  return {ms,txt,expired};
+}
 
 /* ============================================================
    RENDERING
@@ -1883,15 +1900,17 @@ function pctClass(p){ if(p==null) return ""; if(p<=25) return "low"; if(p<=60) r
 function usesCount(it){ if(it && it.byCount!=null) return !!it.byCount; const n=((it&&it.name)||"").toLowerCase(); return /\begg\b|eggs\b|\bdozen\b/.test(n); }
 function setPct(id,p){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; it.percent=p; if(it.location==="grocery"&&p>25){ it.location="pantry"; it.checked=false; } save(); renderAll(); }
 
-function itemCardHTML(it,mode,showCat){
+function itemCardHTML(it,mode,showCat,opts){
   const fs=freshStatus(it);
+  const fine=(opts&&opts.expiring)?fineExpiry(it):null;
   const catIco=CAT_ICON[it.category]||"📦";
   const thumb=itemThumb(it);
   let sub=[];
   if(mode==="grocery"){ sub.push(`<span class="pill cat">${catIco} ${it.category}</span>`); }
   else if(showCat){ sub.push(`<span class="pill cat">${catIco} ${it.category}</span>`); }
   if(it.qty) sub.push(`<span>${escapeHtml(it.qty)}</span>`);
-  if(fs && mode!=="grocery"){ sub.push(`<span class="pill ${fs.level==='bad'?'bad':fs.level==='warn'?'warn':'ok'}">${fs.level==='ok'?'🟢':fs.level==='warn'?'⏳':'⚠️'} ${fs.label}</span>`); }
+  if(fine && mode!=="grocery"){ sub.push(`<span class="pill ${fine.expired?'bad':'warn'}">${fine.txt}</span>`); }
+  else if(fs && mode!=="grocery"){ sub.push(`<span class="pill ${fs.level==='bad'?'bad':fs.level==='warn'?'warn':'ok'}">${fs.level==='ok'?'🟢':fs.level==='warn'?'⏳':'⚠️'} ${fs.label}</span>`); }
   if(mode!=="grocery" && it.opened) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
   else if(mode!=="grocery" && !it.opened && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
   if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
@@ -1910,7 +1929,7 @@ function itemCardHTML(it,mode,showCat){
     </div>`;
   }
   // pantry
-  return `<div class="item" data-id="${it.id}">
+  return `<div class="item ${fine&&fine.expired?'expired':''}" data-id="${it.id}">
     <div class="thumb" data-edit="${it.id}">${thumb}</div>
     <div class="body" data-edit="${it.id}">
       <div class="nm">${escapeHtml(it.name)}</div>
@@ -1928,7 +1947,7 @@ function renderPantry(){
   const host=$("#view-pantry");
   let items=state.items.filter(i=>i.location==="pantry" && itemMatchesSearch(i));
   if(activeFilter==="low") items=items.filter(i=>i.percent!=null && i.percent<=25);
-  else if(activeFilter==="expiring") items=items.filter(i=>{const f=freshStatus(i);return f&&f.daysLeft<=3;});
+  else if(activeFilter==="expiring") items=items.filter(i=>{const f=freshStatus(i);return f&&f.daysLeft<=7;});
   if(storeFilter==="pantry") items=items.filter(i=>!i.store||i.store==="pantry");
   else if(storeFilter==="fridge") items=items.filter(i=>i.store==="fridge");
   else if(storeFilter==="freezer") items=items.filter(i=>i.store==="freezer");
@@ -1937,7 +1956,7 @@ function renderPantry(){
   const pantryAll=state.items.filter(i=>i.location==="pantry");
   const total=pantryAll.length;
   const low=pantryAll.filter(i=>i.percent!=null && i.percent<=25).length;
-  const expiring=pantryAll.filter(i=>{const f=freshStatus(i);return f&&f.daysLeft<=3;}).length;
+  const expiring=pantryAll.filter(i=>{const f=freshStatus(i);return f&&f.daysLeft<=7;}).length;
   let summary="";
   if(!searchQ){
     summary=`<div class="summary">
@@ -1976,6 +1995,12 @@ function renderPantry(){
   }
 
   let html=summary;
+
+  if(activeFilter==="expiring"){
+    const sorted=[...items].sort((a,b)=>{ const ea=fineExpiry(a), eb=fineExpiry(b); return (ea?ea.ms:Infinity)-(eb?eb.ms:Infinity); });
+    html+=`<div class="card">`+sorted.map(i=>itemCardHTML(i,"pantry",true,{expiring:true})).join("")+`</div>`;
+    host.innerHTML=html; hydratePhotos(); return;
+  }
 
   if(state.settings.sort==="category"){
     for(const cat of CAT_ORDER){
