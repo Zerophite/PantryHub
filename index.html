@@ -2147,7 +2147,7 @@ function moveItem(id){
   save(); renderAll();
   const toG=it.location==="grocery";
   toastUndo(toG?`🛒 “${it.name}” added to Grocery`:`↩︎ “${it.name}” back in Pantry`,"good",()=>{
-    Object.assign(it,prev); save(); renderAll(); toast("↩︎ Move undone","good");
+    const t=getItem(id)||it; Object.assign(t,prev); save(); renderAll(); toast("↩︎ Move undone","good");
   });
 }
 function toggleCheck(id){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; it.checked=!it.checked; save(); renderAll(); }
@@ -2603,7 +2603,7 @@ const camView=$("#camView"), camVideo=$("#camVideo");
 async function openCamera(mode){
   camMode=mode;
   $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":"PHOTO";
-  $("#camHint").textContent = mode==="barcode"?"Line up the product barcode":
+  $("#camHint").textContent = mode==="barcode"?"Fill the box with the barcode • for round jars keep it centred & flat-on":
     mode==="date"?"Frame the printed date inside the box, hold steady, then tap the shutter":"Tap to capture";
   $("#camHint").classList.remove("scanning");
   $("#camScanBox").style.display = mode==="photo"?"none":"block";
@@ -2741,6 +2741,25 @@ $("#chipPasteImg").addEventListener("click",async()=>{
 });
 
 
+// Build zoomed candidate frames for decoding. Cropping to the centre and upscaling gives the decoder
+// far more pixels per bar — which is exactly what curved, small or far-away barcodes need.
+function _barcodeCenterBand(scale){
+  const v=camVideo, vw=v.videoWidth, vh=v.videoHeight; if(!vw||!vh) return null;
+  const bw=Math.round(vw*0.9), bh=Math.round(vh*0.55);
+  const bx=Math.round((vw-bw)/2), by=Math.round((vh-bh)/2);
+  const up=scale||2.4;
+  const c=document.createElement("canvas"); c.width=Math.round(bw*up); c.height=Math.round(bh*up);
+  const x=c.getContext("2d"); x.imageSmoothingEnabled=true; x.imageSmoothingQuality="high";
+  x.drawImage(v,bx,by,bw,bh,0,0,c.width,c.height);
+  return c;
+}
+function _barcodeCandidates(){
+  const out=[]; const v=camVideo, vw=v.videoWidth, vh=v.videoHeight; if(!vw||!vh) return out;
+  const a=_barcodeCenterBand(2.4); if(a) out.push(a);
+  const b=_barcodeCenterBand(1.6); if(b) out.push(b);
+  const f=document.createElement("canvas"); f.width=vw; f.height=vh; f.getContext("2d").drawImage(v,0,0); out.push(f);
+  return out;
+}
 // Barcode scanning: native BarcodeDetector where available (Android Chrome),
 // otherwise ZXing (works on iOS Safari + everywhere else) by decoding grabbed frames.
 async function startBarcodeScan(){
@@ -2748,10 +2767,14 @@ async function startBarcodeScan(){
   if("BarcodeDetector" in window){
     try{
       barcodeDetector=barcodeDetector||new BarcodeDetector({formats:["ean_13","ean_8","upc_a","upc_e","code_128","code_39","itf","codabar"]});
+      let _nf=0;
       const tick=async()=>{
         if(!camStream) return;
         try{
-          const codes=await barcodeDetector.detect(camVideo);
+          let codes=await barcodeDetector.detect(camVideo);
+          if((!codes||!codes.length) && (_nf++%3===0)){                 // every 3rd frame, also try a zoomed centre band
+            const f=_barcodeCenterBand(2.4); if(f){ try{ codes=await barcodeDetector.detect(f); }catch(_){ } }
+          }
           if(codes && codes.length){ const code=codes[0].rawValue; closeCamera(); onBarcode(code); return; }
         }catch(e){}
         scanLoop=requestAnimationFrame(tick);
@@ -2773,17 +2796,17 @@ async function startBarcodeScan(){
     if(!camStream||busy) return;
     busy=true;
     try{
-      const v=camVideo, vw=v.videoWidth, vh=v.videoHeight;
-      if(vw&&vh){
-        const c=document.createElement("canvas"); c.width=vw; c.height=vh;
-        c.getContext("2d").drawImage(v,0,0,vw,vh);
-        const res=await zxingReader.decodeFromImageUrl(c.toDataURL("image/png"));
-        const code=res && (res.getText?res.getText():res.text);
-        if(code){ closeCamera(); onBarcode(code); return; }
+      const cands=_barcodeCandidates();                                 // zoomed centre band(s) first, then full frame
+      for(const c of cands){
+        try{
+          const res=await zxingReader.decodeFromImageUrl(c.toDataURL("image/png"));
+          const code=res && (res.getText?res.getText():res.text);
+          if(code){ closeCamera(); onBarcode(code); return; }
+        }catch(_){ /* try the next crop */ }
       }
-    }catch(e){ /* no barcode in this frame — keep trying */ }
+    }catch(e){ /* keep trying */ }
     busy=false;
-  },450);
+  },400);
 }
 // Lazy-load ZXing barcode library from CDN (only when first needed)
 let zxingLoaded=false, zxingReader=null;
