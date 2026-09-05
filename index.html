@@ -415,6 +415,7 @@ body.viewonly .vobadge{display:block}
       <div class="chipbtns">
         <button class="chip" id="chipGoogleImg" style="display:none">🔎 Search Google Images</button>
         <button class="chip" id="chipPasteImg">📋 Paste image</button>
+        <button class="chip" id="chipReadName">📷 Read name from photo</button>
         <button class="chip" id="chipPhoto">🖼️ Add your own photo</button>
       </div>
     </div>
@@ -1296,7 +1297,7 @@ function wholeSpiceSVG(name){
 }
 function itemThumb(it){
   const n=(it.name||"").toLowerCase();
-  if(it.photo==="L") return `<img class="lazyphoto" data-pid="${it.id}" data-bc="${it.barcode||''}" alt="" src="">`;
+  if(it.photo==="L") return `<img class="lazyphoto" data-pid="${it.id}" data-bc="${it.barcode||''}" data-nm="${(it.name||'').replace(/"/g,'&quot;')}" alt="" src="">`;
   if(it.photo) return `<img src="${it.photo}" alt="">`;
   if(/cheese sauce|liquid cheese|nacho cheese|cheese dip|cheese spread/.test(n)) return jarSVG("#f0a72e");
   if(/mozzarella|white cheese|string cheese/.test(n)) return cheeseWedgeSVG("#f7f3e6");
@@ -1411,6 +1412,32 @@ const FRESH=[
   [["pancit canton","instant noodle","cup noodle","instant ramen","noodle soup","bone noodle"],{fridge:0,freezer:0,pantry:365}],
   [["polvoron"],{fridge:180,freezer:180,pantry:60}],
   [["sesame seed","toasted sesame"],{fridge:365,freezer:365,pantry:365}],
+  // --- Targeted keyword guards + more grocery items (specifics BEFORE broad produce/meat/condiment matches) ---
+  [["lemongrass","lemon grass"],{fridge:21,freezer:180,pantry:3}],
+  [["oyster sauce","oyster flavoured","oyster flavored","oyster-flavoured","oyster-flavored"],{fridge:150,freezer:0,pantry:30}],
+  // Broth/stock CARTONS are shelf-stable liquids, not raw meat — keep them off the beef/chicken matches.
+  [["chicken stock","beef stock","vegetable stock","fish stock","chicken broth","beef broth","vegetable broth","bone broth","broth"],{fridge:5,freezer:120,pantry:1}],
+  // Sauces that merely mention garlic/onion (hoisin, chili-garlic) must beat the fresh-produce matches.
+  [["hoisin"],{fridge:270,freezer:180,pantry:60}],
+  [["chili garlic sauce","garlic chili sauce","buffalo sauce","buffalo wing","redhot","red hot"],{fridge:365,freezer:0,pantry:180}],
+  // "...starch" / dry root powders are pantry-dry, not fresh produce.
+  [["sweet potato starch","potato starch","tapioca starch","corn starch","cornstarch","rice starch","yam powder","ube powder","purple yam powder","powdered purple yam"],{fridge:0,freezer:0,pantry:540}],
+  [["minced garlic","garlic paste","jarred garlic","crushed garlic"],{fridge:90,freezer:180,pantry:1}],
+  [["minced ginger","ginger paste","grated ginger"],{fridge:90,freezer:180,pantry:1}],
+  [["imitation crab","surimi","kamaboko","fish cake","fishcake"],{fridge:3,freezer:120,pantry:1}],
+  [["hummus"],{fridge:7,freezer:120,pantry:1}],
+  [["guacamole"],{fridge:3,freezer:0,pantry:1}],
+  [["kimchi"],{fridge:180,freezer:0,pantry:3}],
+  [["sauerkraut"],{fridge:120,freezer:0,pantry:3}],
+  [["coleslaw","cole slaw"],{fridge:5,freezer:0,pantry:1}],
+  [["tempeh"],{fridge:7,freezer:120,pantry:1}],
+  [["edamame"],{fridge:5,freezer:300,pantry:1}],
+  [["seitan"],{fridge:7,freezer:120,pantry:1}],
+  [["coconut water"],{fridge:5,freezer:0,pantry:1}],
+  [["refried beans"],{fridge:5,freezer:90,pantry:1}],
+  [["pickled ginger","sushi ginger"],{fridge:180,freezer:0,pantry:14}],
+  [["chutney"],{fridge:60,freezer:0,pantry:14}],
+  [["bagel","english muffin","naan","croissant","dinner roll","hamburger bun","hot dog bun","burger bun"],{fridge:10,freezer:90,pantry:4}],
   // --- Dry seasoning/spice OVERRIDES first (stop fresh produce/meat words from stealing the match) ---
   [["lemon pepper","black pepper","white pepper","peppercorn","pepper flakes","red pepper","chili pepper","chilli pepper","crushed pepper","cracked pepper","pepper powder","chili flakes","chilli flakes","chili powder","cayenne pepper"],{fridge:730,freezer:730,pantry:730}],
   [["ground cinnamon","ground ginger","ground clove","ground cumin","ground coriander","ground nutmeg","ground allspice","ground mustard","ground turmeric","ground paprika","ground pepper"],{fridge:365,freezer:365,pantry:365}],
@@ -1695,7 +1722,9 @@ function hydratePhotos(){ try{ document.querySelectorAll("img.lazyphoto").forEac
     const bc=img.dataset.bc;
     const done=()=>{ img.dataset.done="1"; };
     const cache=(p)=>{ _photoMem[id]=p; try{ idbPut(id,p); }catch(e){} img.src=p; };
-    const tryProducts=()=>{ if(bc && window.Products){ window.Products.get(bc).then(sp=>{ if(sp && typeof sp.photo==="string" && sp.photo.startsWith("data:")) cache(sp.photo); done(); }).catch(done); } else done(); };
+    const nmv=img.dataset.nm||"";
+    const tryName=()=>{ const k=(typeof nameKey==="function")?nameKey(nmv):""; if(k && window.Products){ window.Products.get(k).then(g=>{ if(g && typeof g.photo==="string" && g.photo.startsWith("data:")) cache(g.photo); done(); }).catch(done); } else done(); };
+    const tryProducts=()=>{ if(bc && window.Products){ window.Products.get(bc).then(sp=>{ if(sp && typeof sp.photo==="string" && sp.photo.startsWith("data:")){ cache(sp.photo); done(); } else tryName(); }).catch(tryName); } else tryName(); };
     if(window.Photos){ window.Photos.get(id).then(p=>{ if(typeof p==="string" && p.startsWith("data:")){ cache(p); done(); } else tryProducts(); }).catch(tryProducts); }
     else tryProducts();
   });
@@ -2330,6 +2359,16 @@ document.addEventListener("click",function(e){ var bn=e.target.closest && e.targ
 $("#fCntMinus").addEventListener("click",()=>{ $("#fCntVal").textContent=Math.max(1,(parseInt($("#fCntVal").textContent,10)||1)-1); });
 $("#fCntPlus").addEventListener("click",()=>{ $("#fCntVal").textContent=(parseInt($("#fCntVal").textContent,10)||1)+1; });
 $("#fName").addEventListener("blur",()=>{ const v=$("#fName").value; if(v.trim()) $("#fName").value=titleCase(v); });
+$("#fName").addEventListener("blur",()=>{
+  const nm=$("#fName").value.trim(); if(!nm || !window.Products) return;
+  const have = typeof pendingPhoto==="string" && (pendingPhoto.startsWith("data:")||pendingPhoto.startsWith("http"));
+  const k=nameKey(nm); if(!k) return;
+  window.Products.get(k).then(g=>{
+    if(!g) return;
+    if(!have && typeof g.photo==="string" && g.photo.startsWith("data:")){ pendingPhoto=g.photo; showPhoto(pendingPhoto); toast("✓ Matched a shared image","good"); }
+    if(g.category && !catTouched && CAT_ORDER.includes(g.category)){ setCatSelect(g.category); $("#autoCatTag").textContent=" → shared: "+g.category; }
+  }).catch(()=>{});
+});
 $("#btnSaveItem").addEventListener("click",()=>{
   if(!requireEdit()) return;
   const name=titleCase($("#fName").value.trim());
@@ -2360,9 +2399,20 @@ $("#btnSaveItem").addEventListener("click",()=>{
     const tgt = editingId ? getItem(editingId) : state.items[state.items.length-1];
     if(tgt) tgt.barcode=bc;
     rememberProduct(bc,{name:data.name, category:data.category, photo:data.photo||null});  // learns your corrected photo/category
-    if(isAdmin() && window.Products) window.Products.save(bc,{name:data.name,category:data.category,photo:data.photo||null}).then(ok=>toast(ok?"📤 Saved to the shared database":"⚠️ Shared save failed — check the Firestore rule",ok?"good":"warn"));
   }
-  if(!bc && isAdmin()) toast("ℹ️ No barcode on this item — scan its barcode (Add Item) so it can be shared","warn");
+  if(isAdmin() && window.Products){
+    const _tgt = editingId ? getItem(editingId) : state.items[state.items.length-1];
+    const _id = _tgt ? _tgt.id : null;
+    const _realNow = (typeof data.photo==="string" && data.photo.startsWith("data:")) ? data.photo : null;
+    const _share=(ph)=>{
+      const info={name:data.name, category:data.category, photo:ph||""};
+      const jobs=[]; if(bc) jobs.push(window.Products.save(bc,info));
+      const k=nameKey(data.name); if(k) jobs.push(window.Products.save(k,info));
+      if(!jobs.length) return;
+      Promise.all(jobs).then(rs=>{ const okAll=rs.every(Boolean); toast(okAll?(ph?"📤 Shared to everyone (name + image)":"📤 Shared to everyone"):"⚠️ Shared save failed — check the Firestore rule", okAll?"good":"warn"); });
+    };
+    if(_realNow) _share(_realNow); else resolveItemPhoto(_id, bc, data.name).then(_share);
+  }
   if(ensureCat(data.category)){ rebuildCats(); renderCatList(); }   // auto-create the category if it's new
   { const _t = editingId ? getItem(editingId) : state.items[state.items.length-1]; if(_t && typeof _t.photo==="string" && _t.photo.startsWith("data:")){ setLocalPhoto(_t.id,_t.photo); _t.photo="L"; } }
   learnCat(data.name, data.category); lastCat=data.category;        // remember the user's own preference
@@ -2418,6 +2468,55 @@ let chainDate=false;   // after a barcode scan, auto-open the expiry-date scanne
 let rapidMode=false;   // hands-free loop: barcode -> date -> auto-save -> next barcode
 let backupForId=null;
 function normName(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
+// Fresh produce the app recognises by name (so "Apple" and "Apples" share one image key). Specific first.
+const PRODUCE_SYN=[
+  ["sweet potato",["sweet potato","sweet potatoes","kamote"]],
+  ["bell pepper",["bell pepper","bell peppers","capsicum"]],
+  ["chili pepper",["chili pepper","chili peppers","chilli pepper","chilli peppers","hot pepper","hot peppers"]],
+  ["jalapeno",["jalapeno","jalapenos","jalape"]],
+  ["grapefruit",["grapefruit","grapefruits"]],
+  ["pineapple",["pineapple","pineapples"]],
+  ["pomegranate",["pomegranate","pomegranates"]],
+  ["papaya",["papaya","papayas"]],
+  ["avocado",["avocado","avocados"]],
+  ["coconut",["coconut","coconuts"]],
+  ["cucumber",["cucumber","cucumbers"]],
+  ["zucchini",["zucchini","zucchinis","courgette","courgettes"]],
+  ["eggplant",["eggplant","eggplants","aubergine","talong"]],
+  ["broccoli",["broccoli"]],
+  ["cauliflower",["cauliflower"]],
+  ["cabbage",["cabbage","cabbages"]],
+  ["lettuce",["lettuce"]],
+  ["celery",["celery"]],
+  ["carrot",["carrot","carrots"]],
+  ["beet",["beetroot","beets"]],
+  ["potato",["russet potato","russet potatoes","potato","potatoes"]],
+  ["onion",["onion","onions"]],
+  ["garlic",["garlic"]],
+  ["tomato",["tomato","tomatoes"]],
+  ["corn",["corn on the cob","sweet corn","corn cob"]],
+  ["nectarine",["nectarine","nectarines"]],
+  ["peach",["peach","peaches"]],
+  ["plum",["plum","plums"]],
+  ["pear",["pear","pears"]],
+  ["mango",["mango","mangoes","mangos"]],
+  ["kiwi",["kiwifruit","kiwi","kiwis"]],
+  ["lemon",["lemon","lemons"]],
+  ["lime",["lime","limes"]],
+  ["orange",["orange","oranges","mandarin","tangerine","clementine"]],
+  ["banana",["banana","bananas"]],
+  ["apple",["apple","apples"]],
+  ["melon",["watermelon","cantaloupe","honeydew","muskmelon","melon","melons"]],
+  ["grape",["grape","grapes"]]
+];
+const _PROCESSED=/(powder|granule|salt|paste|sauce|oil|vinegar|dressing|soup|seasoning|extract|juice|puree|canned|jam|jelly|chip|crisp|syrup|starch|flour|dried)/;
+// A stable shared-DB key for an item name. Fresh produce collapses to a canonical key; everything else keys on its full name.
+function nameKey(name){
+  const raw=(name||"").toLowerCase().trim();
+  if(!raw) return "";
+  if(!_PROCESSED.test(raw)){ for(const pair of PRODUCE_SYN){ const canon=pair[0], syns=pair[1]; for(const sy of syns){ if(raw.indexOf(sy)>=0) return "n:"+canon; } } }
+  const n=normName(name); return n ? "n:"+n : "";
+}
 function sameNameItem(nm){ const t=normName(nm); return t?state.items.find(i=>normName(i.name)===t):null; }
 // Same product already here -> offer to keep it as a backup batch (or open the existing one).
 function offerDuplicate(existing){
@@ -2447,10 +2546,25 @@ function rememberProduct(code, info){
   o[code]=Object.assign({}, o[code], i2, {ts:Date.now()});
   try{ localStorage.setItem(PRODUCTS_KEY, JSON.stringify(o)); }catch(e){}
 }
+// Resolve an item's real photo bytes from any store: session cache -> IndexedDB -> cloud (by id) -> shared DB (by barcode) -> generic (by name).
+function resolveItemPhoto(id, bc, name){
+  return new Promise(res=>{
+    const ok=p=>typeof p==="string"&&p.startsWith("data:");
+    if(id && ok(_photoMem[id])) return res(_photoMem[id]);
+    const tryName=()=>{ const k=(typeof nameKey==="function")?nameKey(name):""; if(k && window.Products){ window.Products.get(k).then(g=>res(g&&ok(g.photo)?g.photo:null)).catch(()=>res(null)); } else res(null); };
+    const tryBc=()=>{ if(bc && window.Products){ window.Products.get(bc).then(sp=>{ if(sp&&ok(sp.photo)){ return res(sp.photo);} tryName(); }).catch(tryName); } else tryName(); };
+    const tryCloud=()=>{ if(id && window.Photos){ window.Photos.get(id).then(p=>{ if(ok(p)) return res(p); tryBc(); }).catch(tryBc); } else tryBc(); };
+    if(id){ idbGet(id).then(d=>{ if(ok(d)){ _photoMem[id]=d; return res(d);} tryCloud(); }); } else tryBc();
+  });
+}
 function showPhoto(url){
   const pv=$("#photoPreview"), hint=$("#photoHint");
-  if(url){ pv.src=url; pv.style.display="block"; hint.textContent="Tap “Add photo” to replace"; }
-  else { pv.style.display="none"; hint.textContent="📷 No photo yet"; }
+  const show=u=>{ pv.src=u; pv.style.display="block"; hint.textContent="Tap “Add photo” to replace"; };
+  if(typeof url==="string" && (url.startsWith("data:")||url.startsWith("http"))){ show(url); return; }
+  pv.style.display="none"; pv.removeAttribute("src"); hint.textContent="📷 No photo yet";
+  if(url==="L"){ hint.textContent="Loading photo…";
+    resolveItemPhoto(editingId, pendingBarcode, ($("#fName")&&$("#fName").value)||"").then(p=>{ if(p){ pendingPhoto=p; show(p); } else hint.textContent="📷 No photo yet"; });
+  }
 }
 // compress an image element/canvas to small jpeg dataURL
 function toThumb(imgOrCanvas,max=360,q=0.62){
@@ -2469,6 +2583,7 @@ const fileInput=document.createElement("input");
 fileInput.type="file"; fileInput.accept="image/*"; fileInput.capture="environment"; fileInput.style.display="none";
 document.body.appendChild(fileInput);
 $("#chipPhoto").addEventListener("click",()=>{ photoMode="photo"; fileInput.click(); });
+$("#chipReadName").addEventListener("click",()=>{ photoMode="identify"; fileInput.click(); });
 let photoMode="photo";
 fileInput.addEventListener("change",()=>{
   const f=fileInput.files[0]; if(!f) return;
@@ -2832,6 +2947,10 @@ async function lookupBarcode(code){
   }catch(e){}
   const bf=$("#fBarcode"); if(bf && !bf.value.trim()) bf.value=code;   // fill the scanned number automatically
   toast(isAdmin()?"Not in the database — its barcode is filled in. Type the name + add a photo, then Save to share it.":"Not in the database — its barcode is filled in. Type the name (and add a photo) and Save; I'll remember it.","warn");
+  rapidMode=false;   // this item needs attention — stop the hands-free loop
+  setTimeout(()=>{ if(!$("#itemScrim").classList.contains("on")) return;
+    if(confirm("Couldn't find this item in the databases.\n\nTake a photo of the front label so I can read its name for you?\n\n(Or press Cancel and type the name yourself.)")){ photoMode="identify"; fileInput.click(); }
+  }, 250);
 }
 // Fill the add-item form from a barcode result
 function applyBarcodeResult(nm, catGuess, imgUrl){
