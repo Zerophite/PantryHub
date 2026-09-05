@@ -1424,6 +1424,20 @@ const FRESH=[
   [["chili garlic sauce","garlic chili sauce","buffalo sauce","buffalo wing","redhot","red hot"],{fridge:365,freezer:0,pantry:180}],
   // "...starch" / dry root powders are pantry-dry, not fresh produce.
   [["sweet potato starch","potato starch","tapioca starch","corn starch","cornstarch","rice starch","yam powder","ube powder","purple yam powder","powdered purple yam"],{fridge:0,freezer:0,pantry:540}],
+  // Supplements / vitamins — brand names like "Jamieson" contain "jam"; keep them off the jam & other food matches.
+  [["jamieson","webber natural","multivitamin","fish oil","omega-3","omega 3","softgel","capsule"," supplement","probiotic","glucosamine","magnesium","vitamin c","vitamin d","zinc "],{fridge:0,freezer:0,pantry:730}],
+  // "graham" / crumbs contain "ham" — dried crumb products are shelf-stable, not deli ham.
+  [["graham","chapelure","cracker crumb","bread crumb","biscuit crumb"],{fridge:0,freezer:180,pantry:180}],
+  // Granulated / dried alliums are dry spices, not fresh garlic/onion.
+  [["granulated garlic","granulated onion","garlic granulated","onion granulated","dried garlic","dried onion","minced onion","onion flake"],{fridge:0,freezer:0,pantry:730}],
+  // Dried herb flakes & lemon-herb blends are pantry-stable spices, not fresh herbs/citrus.
+  [["parsley flakes","dried parsley","dried cilantro","dried dill","dried chive","cilantro flakes","lemon and herb","lemon & herb","lemon herb"],{fridge:365,freezer:365,pantry:365}],
+  // Anything pickled / brined keeps for months in the fridge — beat the fresh cucumber/produce match.
+  [["pickled","gherkin","cornichon"],{fridge:120,freezer:0,pantry:21}],
+  // Dried leafy greens (e.g. dried cassava leaves, dried moringa) are shelf-stable, not fresh produce.
+  [["feuilles de manioc","cassava leaf","dried cassava","manioc seche","dried moringa","dried malunggay","dried spinach"],{fridge:180,freezer:365,pantry:180}],
+  // Fruit / fig spreads behave like jam once opened, not like a spice.
+  [["fig spread","fig chili spread","fruit spread","fig jam"],{fridge:60,freezer:0,pantry:21}],
   [["minced garlic","garlic paste","jarred garlic","crushed garlic"],{fridge:90,freezer:180,pantry:1}],
   [["minced ginger","ginger paste","grated ginger"],{fridge:90,freezer:180,pantry:1}],
   [["imitation crab","surimi","kamaboko","fish cake","fishcake"],{fridge:3,freezer:120,pantry:1}],
