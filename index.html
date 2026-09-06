@@ -46,15 +46,15 @@ html,body{margin:0;padding:0;height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  background:repeating-linear-gradient(#e3f2fd,#e3f2fd 20px,#90caf9 20px,#90caf9 40px); color:var(--ink); overscroll-behavior-y:none;
-  overflow:hidden;
+  background:var(--card); color:var(--ink); overscroll-behavior-y:none;
+  height:100vh; display:flex; flex-direction:column; overflow:hidden;
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input,select,textarea{font-family:inherit;font-size:16px}
 
 /* ---------- Header ---------- */
 header{
-  position:fixed;top:0;left:0;right:0;z-index:40;
+  flex:0 0 auto;z-index:40;
   background:linear-gradient(135deg,var(--green),var(--green-d));
   color:#fff;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
   box-shadow:0 2px 8px rgba(0,0,0,.15);
@@ -74,12 +74,11 @@ header{
 
 /* ---------- Tabs ---------- */
 nav.tabs{
-  position:fixed;bottom:0;left:0;right:0;z-index:40;outline:3px solid #ff9800;
+  flex:0 0 auto;z-index:40;
   background:var(--card);border-top:1px solid var(--line);
   display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom));
   box-shadow:0 -2px 12px rgba(0,0,0,.06);
 }
-nav.tabs::after{content:"";position:absolute;left:0;right:0;top:100%;height:160px;background:var(--card)}
 nav.tabs button{
   flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
   padding:6px 0;border-radius:12px;color:var(--muted);font-size:11px;font-weight:600;
@@ -93,7 +92,7 @@ nav.tabs button .badge{position:absolute;transform:translate(14px,-6px);backgrou
 nav.tabs .tabbtn{position:relative}
 
 /* ---------- Content ---------- */
-main{position:fixed;left:0;right:0;top:96px;bottom:62px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:12px 12px 24px;max-width:640px;margin:0 auto;width:100%;background:var(--bg);outline:3px solid #e53935}
+main{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:12px 12px 24px;max-width:640px;margin:0 auto;width:100%;background:var(--bg)}
 .view{display:none}
 .view.on{display:block}
 
@@ -559,7 +558,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 31 · 2026-09-06</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 32 · 2026-09-06</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2155,18 +2154,10 @@ function switchTab(t){
   { const _m=document.querySelector("main"); if(_m) _m.scrollTop=0; }
 }
 $$(".tabbtn").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
-function layoutShell(){
-  const h=document.querySelector("header"), n=document.querySelector("nav.tabs"), m=document.querySelector("main");
-  if(!h||!n||!m) return;
-  m.style.top=h.offsetHeight+"px";
-  m.style.bottom=n.offsetHeight+"px";
-}
-layoutShell();
-["load","resize","orientationchange","pageshow"].forEach(ev=>window.addEventListener(ev,()=>setTimeout(layoutShell,50)));
-if(window.visualViewport) window.visualViewport.addEventListener("resize",()=>setTimeout(layoutShell,50));
-setTimeout(layoutShell,300); setTimeout(layoutShell,900);
+/* flex shell — no manual sizing needed */
 function _sab(){ try{ const d=document.createElement("div"); d.style.cssText="position:fixed;left:0;bottom:0;width:1px;height:env(safe-area-inset-bottom,0px)"; document.body.appendChild(d); const h=d.offsetHeight; d.remove(); return h; }catch(e){ return -1; } }
-function showDiag(){ const b=$("#buildStamp"); if(!b) return; const n=document.querySelector("nav.tabs"), r=n?n.getBoundingClientRect():{top:0,bottom:0}; const de=document.documentElement; b.textContent="Build 31 · sc"+screen.height+" ih"+window.innerHeight+" ch"+de.clientHeight+" navTop"+Math.round(r.top)+" navBot"+Math.round(r.bottom)+" sa"+_sab(); }
+function _mu(u){ try{ const d=document.createElement("div"); d.style.cssText="position:fixed;top:0;left:0;width:1px;height:"+u; document.body.appendChild(d); const h=d.offsetHeight; d.remove(); return h; }catch(e){ return -1; } }
+function showDiag(){ const b=$("#buildStamp"); if(!b) return; const n=document.querySelector("nav.tabs"), r=n?n.getBoundingClientRect():{bottom:0}; b.textContent="Build 32 · sc"+screen.height+" ih"+window.innerHeight+" vh"+_mu("100vh")+" dvh"+_mu("100dvh")+" svh"+_mu("100svh")+" lvh"+_mu("100lvh")+" nb"+Math.round(r.bottom)+" sa"+_sab(); }
 showDiag(); setTimeout(showDiag,600);
 window.addEventListener("resize",()=>setTimeout(showDiag,80));
 if(window.visualViewport) window.visualViewport.addEventListener("resize",()=>setTimeout(showDiag,80));
