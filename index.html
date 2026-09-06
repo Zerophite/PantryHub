@@ -46,7 +46,7 @@ html,body{margin:0;padding:0;height:100%}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  background:var(--bg); color:var(--ink); overscroll-behavior-y:none;
+  background:var(--card); color:var(--ink); overscroll-behavior-y:none;
   overflow:hidden;
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
@@ -93,7 +93,7 @@ nav.tabs button .badge{position:absolute;transform:translate(14px,-6px);backgrou
 nav.tabs .tabbtn{position:relative}
 
 /* ---------- Content ---------- */
-main{position:fixed;left:0;right:0;top:96px;bottom:62px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:12px 12px 24px;max-width:640px;margin:0 auto;width:100%}
+main{position:fixed;left:0;right:0;top:96px;bottom:62px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:12px 12px 24px;max-width:640px;margin:0 auto;width:100%;background:var(--bg)}
 .view{display:none}
 .view.on{display:block}
 
@@ -559,7 +559,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 29 · 2026-09-06</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 30 · 2026-09-06</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2166,7 +2166,7 @@ layoutShell();
 if(window.visualViewport) window.visualViewport.addEventListener("resize",()=>setTimeout(layoutShell,50));
 setTimeout(layoutShell,300); setTimeout(layoutShell,900);
 function _sab(){ try{ const d=document.createElement("div"); d.style.cssText="position:fixed;left:0;bottom:0;width:1px;height:env(safe-area-inset-bottom,0px)"; document.body.appendChild(d); const h=d.offsetHeight; d.remove(); return h; }catch(e){ return -1; } }
-function showDiag(){ const b=$("#buildStamp"); if(!b) return; const vv=window.visualViewport, n=document.querySelector("nav.tabs"); const nb=n?Math.round(n.getBoundingClientRect().bottom):0; b.textContent="Build 29 · sc"+screen.height+" ih"+window.innerHeight+" vv"+(vv?Math.round(vv.height):0)+" nb"+nb+" sa"+_sab(); }
+function showDiag(){ const b=$("#buildStamp"); if(!b) return; const vv=window.visualViewport, n=document.querySelector("nav.tabs"); const nb=n?Math.round(n.getBoundingClientRect().bottom):0; b.textContent="Build 30 · sc"+screen.height+" ih"+window.innerHeight+" vv"+(vv?Math.round(vv.height):0)+" nb"+nb+" sa"+_sab(); }
 showDiag(); setTimeout(showDiag,600);
 window.addEventListener("resize",()=>setTimeout(showDiag,80));
 if(window.visualViewport) window.visualViewport.addEventListener("resize",()=>setTimeout(showDiag,80));
