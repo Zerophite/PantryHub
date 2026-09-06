@@ -43,6 +43,7 @@
 :root[data-theme="dark"] .btn.dzlink{border-color:var(--line)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;height:100%}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   background:var(--bg); color:var(--ink); overscroll-behavior-y:none;
@@ -88,7 +89,6 @@ nav.tabs button.on{color:var(--green);font-weight:800}
 nav.tabs .tabbtn.on{background:#e8f5e9}
 :root[data-theme="dark"] nav.tabs .tabbtn.on{background:#22301f}
 nav.tabs .tabbtn.on .ti{transform:scale(1.14)}
-nav.tabs .tabbtn.on::before{content:"";position:absolute;top:0;left:22%;right:22%;height:3px;border-radius:0 0 3px 3px;background:var(--green)}
 nav.tabs button .badge{position:absolute;transform:translate(14px,-6px);background:var(--red);color:#fff;font-size:10px;min-width:16px;height:16px;border-radius:8px;padding:0 4px;display:flex;align-items:center;justify-content:center;font-weight:700}
 nav.tabs .tabbtn{position:relative}
 
@@ -559,7 +559,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 28 · 2026-09-06</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 29 · 2026-09-06</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2165,6 +2165,11 @@ layoutShell();
 ["load","resize","orientationchange","pageshow"].forEach(ev=>window.addEventListener(ev,()=>setTimeout(layoutShell,50)));
 if(window.visualViewport) window.visualViewport.addEventListener("resize",()=>setTimeout(layoutShell,50));
 setTimeout(layoutShell,300); setTimeout(layoutShell,900);
+function _sab(){ try{ const d=document.createElement("div"); d.style.cssText="position:fixed;left:0;bottom:0;width:1px;height:env(safe-area-inset-bottom,0px)"; document.body.appendChild(d); const h=d.offsetHeight; d.remove(); return h; }catch(e){ return -1; } }
+function showDiag(){ const b=$("#buildStamp"); if(!b) return; const vv=window.visualViewport, n=document.querySelector("nav.tabs"); const nb=n?Math.round(n.getBoundingClientRect().bottom):0; b.textContent="Build 29 · sc"+screen.height+" ih"+window.innerHeight+" vv"+(vv?Math.round(vv.height):0)+" nb"+nb+" sa"+_sab(); }
+showDiag(); setTimeout(showDiag,600);
+window.addEventListener("resize",()=>setTimeout(showDiag,80));
+if(window.visualViewport) window.visualViewport.addEventListener("resize",()=>setTimeout(showDiag,80));
 $("#buildStamp") && $("#buildStamp").addEventListener("click",()=>{
   const vv=window.visualViewport, nav=document.querySelector("nav.tabs");
   const nr=nav?nav.getBoundingClientRect():{bottom:0};
