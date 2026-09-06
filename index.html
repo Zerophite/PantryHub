@@ -82,7 +82,7 @@ nav.tabs button{
   flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;
   padding:6px 0;border-radius:12px;color:var(--muted);font-size:11px;font-weight:600;
 }
-nav.tabs button .ti{font-size:22px;line-height:1}
+nav.tabs button .ti{font-size:22px;line-height:1;height:26px;display:flex;align-items:center;justify-content:center}
 nav.tabs button.on{color:var(--green)}
 nav.tabs button .badge{position:absolute;transform:translate(14px,-6px);background:var(--red);color:#fff;font-size:10px;min-width:16px;height:16px;border-radius:8px;padding:0 4px;display:flex;align-items:center;justify-content:center;font-weight:700}
 nav.tabs .tabbtn{position:relative}
@@ -249,6 +249,7 @@ body.viewonly .cathead .catadd{display:none}
 .qstep{display:flex;align-items:center;gap:1px;margin-bottom:6px;background:#eef2ea;border-radius:10px;padding:1px}
 .qstep button{width:28px;height:28px;border:none;background:transparent;font-size:18px;font-weight:800;color:var(--green-d);cursor:pointer;line-height:1}
 .qstep span{min-width:22px;text-align:center;font-weight:800;font-size:14px;color:var(--ink)}
+.qstep .qnum{min-width:24px;text-align:center;font-weight:800;font-size:14px;color:var(--ink);background:transparent;border:none;cursor:pointer;padding:0 3px;line-height:1;text-decoration:underline dotted;text-underline-offset:3px}
 :root[data-theme="dark"] .qstep{background:#2a3a2e}
 .chip:active{background:#dce7d6}
 
@@ -417,7 +418,7 @@ body.viewonly .vobadge{display:block}
       <div class="chipbtns">
         <button class="chip" id="chipGoogleImg" style="display:none">🔎 Search Google Images</button>
         <button class="chip" id="chipPasteImg">📋 Paste image</button>
-        <button class="chip" id="chipReadName">📷 Read name from photo</button>
+        <button class="chip" id="chipReadName">📷 Scan the name</button>
         <button class="chip" id="chipPhoto">🖼️ Add your own photo</button>
       </div>
     </div>
@@ -463,11 +464,12 @@ body.viewonly .vobadge{display:block}
       <label>Quantity · how many you have</label>
       <div class="rng" style="gap:14px;justify-content:flex-start">
         <button type="button" class="chip" id="fCntMinus" style="font-size:18px;padding:6px 16px">−</button>
-        <span id="fCntVal" style="font-weight:800;font-size:19px;min-width:30px;text-align:center">1</span>
+        <span id="fCntVal" title="Tap to type an amount" style="font-weight:800;font-size:19px;min-width:30px;text-align:center;cursor:pointer;text-decoration:underline dotted;text-underline-offset:4px">1</span>
         <button type="button" class="chip" id="fCntPlus" style="font-size:18px;padding:6px 16px">＋</button>
       </div>
+      <div class="sub-hint" style="margin-top:6px">Tip: tap the number to type an exact amount (e.g. 30 eggs).</div>
     </div>
-    <div class="field">
+    <div class="field" id="byCountField" style="display:none">
       <label class="vacrow"><input type="checkbox" id="fByCount"> <span>🔢 Count-only item — hide the % slider (e.g. eggs, cans)</span></label>
     </div>
 
@@ -1912,6 +1914,12 @@ function itemCount(it){ return (it && it.count!=null && it.count>0) ? it.count :
 function migrateCount(){ let ch=false; (state.items||[]).forEach(it=>{ if(it.count==null){ it.count=1+((it.backups&&it.backups.length)?it.backups.length:0); ch=true; } if(it.backups){ delete it.backups; ch=true; } }); return ch; }
 function pctClass(p){ if(p==null) return ""; if(p<=25) return "low"; if(p<=60) return "mid"; return ""; }
 function usesCount(it){ if(it && it.byCount!=null) return !!it.byCount; const n=((it&&it.name)||"").toLowerCase(); return /\begg\b|eggs\b|\bdozen\b/.test(n); }
+// No manual checkbox anymore: keep an item's stored choice, otherwise detect count-style units (eggs, cans) by name.
+function usesCountByName(name, id){
+  const it=id?getItem(id):null;
+  if(it && it.byCount!=null) return !!it.byCount;
+  return /\begg\b|eggs\b|\bdozen\b|\bcans?\b/.test((name||"").toLowerCase());
+}
 function setPct(id,p){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; it.percent=p; if(it.location==="grocery"&&p>25){ it.location="pantry"; it.checked=false; } save(); renderAll(); }
 
 function itemCardHTML(it,mode,showCat,opts){
@@ -1951,7 +1959,7 @@ function itemCardHTML(it,mode,showCat,opts){
       ${pctInline}
     </div>
     <div class="act">
-      <div class="qstep"><button data-dec="${it.id}" title="Use one">−</button><span>${itemCount(it)}</span><button data-inc="${it.id}" title="Add one">+</button></div>
+      <div class="qstep"><button data-dec="${it.id}" title="Use one">−</button><button class="qnum" data-setcount="${it.id}" title="Tap to type an amount">${itemCount(it)}</button><button data-inc="${it.id}" title="Add one">+</button></div>
       <button class="moveBtn togro" data-move="${it.id}" title="Need to buy">🛒</button>
     </div>
   </div>`;
@@ -2095,6 +2103,7 @@ function renderAll(){
    TABS
    ============================================================ */
 function switchTab(t){
+  if(currentTab===t){ try{ window.scrollTo({top:0,behavior:"smooth"}); }catch(e){ window.scrollTo(0,0); } return; }
   currentTab=t;
   $$(".tabbtn").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   $$(".view").forEach(v=>v.classList.remove("on"));
@@ -2128,6 +2137,8 @@ document.addEventListener("click",e=>{
   if(incb){ incCount(incb.dataset.inc); return; }
   const decb=e.target.closest("[data-dec]");
   if(decb){ decCount(decb.dataset.dec); return; }
+  const setc=e.target.closest("[data-setcount]");
+  if(setc){ setCountPrompt(setc.dataset.setcount); return; }
   const unopenb=e.target.closest("[data-unopen]");
   if(unopenb){ markUnopened(unopenb.dataset.unopen); return; }
   const move=e.target.closest("[data-move]");
@@ -2168,6 +2179,15 @@ function newBatch(id){
   toast(`🔄 New batch — “${it.name}” is fresh & unopened again`,"good");
 }
 function incCount(id){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; it.count=itemCount(it)+1; save(); renderAll(); }
+function setCountPrompt(id){
+  if(!requireEdit()) return;
+  const it=getItem(id); if(!it) return;
+  const v=prompt(`How many “${it.name}” do you have? Type the number.`, itemCount(it));
+  if(v==null) return;
+  const n=parseInt(String(v).replace(/[^0-9]/g,""),10);
+  if(isNaN(n)){ toast("Please type a number","warn"); return; }
+  it.count=Math.max(1,n); save(); renderAll();
+}
 function decCount(id){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; const c=itemCount(it);
   if(c>1){ it.count=c-1; save(); renderAll(); }
   else { if(confirm("That's your last “"+it.name+"”. Move it to the grocery list?")) moveItem(id); } }
@@ -2288,9 +2308,10 @@ function openItemSheet(id){
   { const bn=$("#btnSaveNext"); if(bn) bn.style.display=it?"none":""; }
   $("#btnMoveItem").textContent = it&&it.location==="pantry" ? "Move to Grocery" : "Move to Pantry";
   updateFreshInfo();
-  { const g=$("#chipGoogleImg"); if(g) g.style.display=isAdmin()?"":"none"; }
-  try{ $("#itemSheet").scrollTop=0; }catch(e){}
+  { const g=$("#chipGoogleImg"); if(g) g.style.display=isAdmin()?"":"none"; const pz=$("#chipPasteImg"); if(pz) pz.style.display=isAdmin()?"":"none"; }
   itemScrim.classList.add("on");
+  try{ $("#itemSheet").scrollTop=0; }catch(e){}
+  requestAnimationFrame(()=>{ try{ $("#itemSheet").scrollTop=0; }catch(e){} });
 }
 function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; backupForId=null; chainDate=false; rapidMode=false; }
 
@@ -2397,6 +2418,7 @@ document.addEventListener("click",function(e){ var bn=e.target.closest && e.targ
 /* amount slider removed — percentage is set from the list chips now */
 $("#fCntMinus").addEventListener("click",()=>{ $("#fCntVal").textContent=Math.max(1,(parseInt($("#fCntVal").textContent,10)||1)-1); });
 $("#fCntPlus").addEventListener("click",()=>{ $("#fCntVal").textContent=(parseInt($("#fCntVal").textContent,10)||1)+1; });
+$("#fCntVal").addEventListener("click",()=>{ const cur=parseInt($("#fCntVal").textContent,10)||1; const v=prompt("How many do you have? Type the number.", cur); if(v==null) return; const n=parseInt(String(v).replace(/[^0-9]/g,""),10); if(!isNaN(n)&&n>=1) $("#fCntVal").textContent=n; });
 $("#fName").addEventListener("blur",()=>{ const v=$("#fName").value; if(v.trim()) $("#fName").value=titleCase(v); });
 $("#fName").addEventListener("blur",()=>{
   const nm=$("#fName").value.trim(); if(!nm || !window.Products) return;
@@ -2416,7 +2438,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
     name, category:$("#fCat").value,
     percent: parseInt($("#fPct").value,10),
     qty:$("#fQty").value.trim(), count:Math.max(1,parseInt($("#fCntVal").textContent,10)||1), exp:$("#fExp").value||null, opened:$("#fOpen").value||null,
-    store:storeVal, vac:$("#fVac").checked, byCount:$("#fByCount")?$("#fByCount").checked:false, note:$("#fNote").value.trim(), photo:pendingPhoto||null,
+    store:storeVal, vac:$("#fVac").checked, byCount:usesCountByName(name, editingId), note:$("#fNote").value.trim(), photo:pendingPhoto||null,
   };
   if(backupForId){
     const host=getItem(backupForId);
@@ -2622,7 +2644,7 @@ const fileInput=document.createElement("input");
 fileInput.type="file"; fileInput.accept="image/*"; fileInput.capture="environment"; fileInput.style.display="none";
 document.body.appendChild(fileInput);
 $("#chipPhoto").addEventListener("click",()=>{ photoMode="photo"; fileInput.click(); });
-$("#chipReadName").addEventListener("click",()=>{ photoMode="identify"; fileInput.click(); });
+$("#chipReadName").addEventListener("click",()=>{ openCamera("name"); });
 let photoMode="photo";
 fileInput.addEventListener("change",()=>{
   const f=fileInput.files[0]; if(!f) return;
@@ -2641,9 +2663,10 @@ const camView=$("#camView"), camVideo=$("#camVideo");
 
 async function openCamera(mode){
   camMode=mode;
-  $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":"PHOTO";
+  $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":mode==="name"?"PRODUCT NAME":"PHOTO";
   $("#camHint").textContent = mode==="barcode"?"Fill the box with the barcode • for round jars keep it centred & flat-on":
-    mode==="date"?"Frame the printed date inside the box, hold steady, then tap the shutter":"Tap to capture";
+    mode==="date"?"Frame the printed date inside the box, hold steady, then tap the shutter":
+    mode==="name"?"Point at the product's NAME (the big text), hold steady, then tap the shutter":"Tap to capture";
   $("#camHint").classList.remove("scanning");
   $("#camScanBox").style.display = mode==="photo"?"none":"block";
   $("#camScanBox").classList.remove("scanning");
@@ -2659,9 +2682,10 @@ async function openCamera(mode){
     camView.style.display="flex";
     if(mode==="barcode") startBarcodeScan();
     if(mode==="date" && !window.GEMINI) getOcrWorker().catch(()=>{});   // warm offline reader (skip if AI is on)
+    if(mode==="name") getOcrWorker().catch(()=>{});                     // warm the on-device text reader
   }catch(err){
     toast("Camera unavailable — use Add photo instead","warn");
-    photoMode=mode; fileInput.click();
+    photoMode=(mode==="name")?"identify":mode; fileInput.click();
   }
 }
 function closeCamera(){
@@ -2887,7 +2911,7 @@ async function identifyPhoto(dataUrl){
     if(worker){ try{ await worker.terminate(); }catch(e){} }
     const name=guessNameFromLabel(text);
     if(name){
-      if(!$("#fName").value.trim()){ $("#fName").value=name; $("#fName").dispatchEvent(new Event("input")); }
+      $("#fName").value=name; $("#fName").dispatchEvent(new Event("input")); $("#fName").dispatchEvent(new Event("blur"));
       toast('✓ Read: "'+name+'" — edit if needed',"good");
     }else{
       toast("Couldn't read a name — type it (photo saved)","warn");
@@ -3083,10 +3107,23 @@ $("#camShutter").addEventListener("click",async()=>{
       if($("#fExp").value){ toast("✓ Saved — next item","good"); rapidSaveAndNext(); }
       else { toast("Couldn't read the date — tap it below, then Save & scan next","warn"); }
     }
+  }else if(camMode==="name"){
+    const shot=captureDateRegionRaw(); closeCamera(); await readNameLive(shot);
   }else{
     pendingPhoto=toThumb(camVideo,420,0.62); closeCamera(); showPhoto(pendingPhoto); toast("Photo captured","good");
   }
 });
+// Read a product name from a live camera frame (on-device OCR) and drop it into the name field.
+async function readNameLive(dataUrl){
+  toast("🔎 Reading name…","good");
+  try{
+    const worker=await getOcrWorker();
+    const r=await worker.recognize(dataUrl);
+    const nm=guessNameFromLabel((r&&r.data&&r.data.text)||"");
+    if(nm){ $("#fName").value=nm; $("#fName").dispatchEvent(new Event("input")); $("#fName").dispatchEvent(new Event("blur")); toast('✓ Read: "'+nm+'" — edit if needed',"good"); }
+    else toast("Couldn't read the name — get closer, fill the box, try again (or type it)","warn");
+  }catch(e){ toast("Couldn't read the label — type the name","warn"); }
+}
 
 // Crop to the on-screen scan box and upscale 3×. Two modes: crisp (hard black/white, best for
 // clean labels) and gentle (grayscale + mild contrast, best for slightly blurry stamps).
