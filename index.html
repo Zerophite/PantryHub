@@ -46,7 +46,8 @@ html,body{margin:0;padding:0;height:100%}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   background:var(--bg); color:var(--ink); overscroll-behavior-y:none;
-  height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden;
+  position:fixed; top:0; right:0; bottom:0; left:0;
+  display:flex; flex-direction:column; overflow:hidden;
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input,select,textarea{font-family:inherit;font-size:16px}
@@ -83,7 +84,11 @@ nav.tabs button{
   padding:6px 0;border-radius:12px;color:var(--muted);font-size:11px;font-weight:600;
 }
 nav.tabs button .ti{font-size:22px;line-height:1;height:26px;display:flex;align-items:center;justify-content:center}
-nav.tabs button.on{color:var(--green)}
+nav.tabs button.on{color:var(--green);font-weight:800}
+nav.tabs .tabbtn.on{background:#e8f5e9}
+:root[data-theme="dark"] nav.tabs .tabbtn.on{background:#22301f}
+nav.tabs .tabbtn.on .ti{transform:scale(1.14)}
+nav.tabs .tabbtn.on::before{content:"";position:absolute;top:0;left:22%;right:22%;height:3px;border-radius:0 0 3px 3px;background:var(--green)}
 nav.tabs button .badge{position:absolute;transform:translate(14px,-6px);background:var(--red);color:#fff;font-size:10px;min-width:16px;height:16px;border-radius:8px;padding:0 4px;display:flex;align-items:center;justify-content:center;font-weight:700}
 nav.tabs .tabbtn{position:relative}
 
@@ -1861,15 +1866,30 @@ function seed(){
 function daysBetween(a,b){ return Math.round((new Date(b)-new Date(a))/86400000); }
 // Vacuum sealing slows spoilage/oxidation & prevents freezer burn — research-backed rough multipliers.
 function vacMult(store){ return store==="freezer"?2.5 : store==="fridge"?2 : 1.5; }
+// The date an item entered the pantry (from created, else decoded from its id, else today).
+function itemAddedISO(it){
+  let t = it.created || (typeof it.id==="string" ? (parseInt(it.id.slice(0,-5),36)||0) : 0);
+  if(t){ const d=new Date(t); if(!isNaN(d)) return d.toISOString().slice(0,10); }
+  return todayISO();
+}
+// Fresh produce, bread & bakery start ageing the moment you buy them — not when "opened".
+function agesFromPurchase(it){
+  const n=(it.name||"").toLowerCase();
+  if(/(dried|dehydrated|canned|jarred|powder|granul|flake|paste|sauce|syrup|jam|jelly|pickled|frozen|juice|chip|crisp|vinegar|extract|seasoning|starch|salt)/.test(n)) return false;
+  if((it.category||"")==="Fruits & Vegetables") return true;
+  if(/\bbread\b|\bbun\b|\bbagel\b|\bpita\b|\bnaan\b|\bcroissant\b|\bloaf\b|\bbaguette\b|dinner roll/.test(n)) return true;
+  return false;
+}
 function freshStatus(item){
   // Returns {useBy, daysLeft, label, level} or null
   let useBy=null, source=null;
-  if(item.opened){
+  const _start = item.opened || (agesFromPurchase(item) ? itemAddedISO(item) : null);
+  if(_start){
     const sl=shelfLife(item.name,item.category);
     if(sl){
       let d=sl[item.store]??sl.pantry;
       if(d>0 && item.vac) d=Math.round(d*vacMult(item.store));
-      if(d>0){ const dt=new Date(item.opened); dt.setDate(dt.getDate()+d); useBy=dt.toISOString().slice(0,10); source="opened"; }
+      if(d>0){ const dt=new Date(_start); dt.setDate(dt.getDate()+d); useBy=dt.toISOString().slice(0,10); source=item.opened?"opened":"bought"; }
     }
   }
   if(item.exp){ if(!useBy || item.exp<useBy){ useBy=item.exp; source="exp"; } }
@@ -1935,8 +1955,8 @@ function itemCardHTML(it,mode,showCat,opts){
   if(it.qty) sub.push(`<span>${escapeHtml(it.qty)}</span>`);
   if(fine && mode!=="grocery"){ sub.push(`<span class="pill ${fine.expired?'bad':'warn'}">${fine.txt}</span>`); }
   else if(fs && mode!=="grocery"){ sub.push(`<span class="pill ${fs.level==='bad'?'bad':fs.level==='warn'?'warn':'ok'}">${fs.level==='ok'?'🟢':fs.level==='warn'?'⏳':'⚠️'} ${fs.label}</span>`); }
-  if(mode!=="grocery" && it.opened) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
-  else if(mode!=="grocery" && !it.opened && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
+  if(mode!=="grocery" && it.opened && !agesFromPurchase(it)) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
+  else if(mode!=="grocery" && !it.opened && !agesFromPurchase(it) && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
   if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
 
   const barHTML=(it.percent!=null)?`<div class="bar ${pctClass(it.percent)}"><i style="width:${it.percent}%"></i></div>`:"";
@@ -2668,7 +2688,7 @@ async function openCamera(mode){
   $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":mode==="name"?"PRODUCT NAME":"PHOTO";
   $("#camHint").textContent = mode==="barcode"?"Fill the box with the barcode • for round jars keep it centred & flat-on":
     mode==="date"?"Frame the printed date inside the box, hold steady, then tap the shutter":
-    mode==="name"?"Point at the product's NAME (the big text), hold steady, then tap the shutter":"Tap to capture";
+    mode==="name"?"Frame the product NAME inside the box, hold steady, then tap the shutter":"Tap to capture";
   $("#camHint").classList.remove("scanning");
   $("#camScanBox").style.display = mode==="photo"?"none":"block";
   $("#camScanBox").classList.remove("scanning");
@@ -2684,7 +2704,7 @@ async function openCamera(mode){
     camView.style.display="flex";
     if(mode==="barcode") startBarcodeScan();
     if(mode==="date" && !window.GEMINI) getOcrWorker().catch(()=>{});   // warm offline reader (skip if AI is on)
-    if(mode==="name") getOcrWorker().catch(()=>{});                     // warm the on-device text reader
+    if(mode==="name") getNameOcrWorker().catch(()=>{});                 // warm the on-device text reader
   }catch(err){
     toast("Camera unavailable — use Add photo instead","warn");
     photoMode=(mode==="name")?"identify":mode; fileInput.click();
@@ -3110,7 +3130,7 @@ $("#camShutter").addEventListener("click",async()=>{
       else { toast("Couldn't read the date — tap it below, then Save & scan next","warn"); }
     }
   }else if(camMode==="name"){
-    const shot=captureDateRegionRaw(); closeCamera(); await readNameLive(shot);
+    const shot=captureNameRegion(); closeCamera(); await readNameLive(shot);
   }else{
     pendingPhoto=toThumb(camVideo,420,0.62); closeCamera(); showPhoto(pendingPhoto); toast("Photo captured","good");
   }
@@ -3119,11 +3139,11 @@ $("#camShutter").addEventListener("click",async()=>{
 async function readNameLive(dataUrl){
   toast("🔎 Reading name…","good");
   try{
-    const worker=await getOcrWorker();
+    const worker=await getNameOcrWorker();
     const r=await worker.recognize(dataUrl);
     const nm=guessNameFromLabel((r&&r.data&&r.data.text)||"");
-    if(nm){ $("#fName").value=nm; $("#fName").dispatchEvent(new Event("input")); $("#fName").dispatchEvent(new Event("blur")); toast('✓ Read: "'+nm+'" — edit if needed',"good"); }
-    else toast("Couldn't read the name — get closer, fill the box, try again (or type it)","warn");
+    if(nm){ $("#fName").value=nm; $("#fName").dispatchEvent(new Event("input")); $("#fName").dispatchEvent(new Event("blur")); toast('✓ Read: "'+nm+'" — fix any mistakes',"good"); }
+    else toast("Couldn't read it. Fancy logos are hard — for packaged items the barcode is more reliable, or just type it.","warn");
   }catch(e){ toast("Couldn't read the label — type the name","warn"); }
 }
 
@@ -3161,6 +3181,20 @@ function captureDateRegionRaw(){
   const c=document.createElement("canvas"); c.width=Math.round(vw*scale); c.height=Math.round(vh*scale);
   c.getContext("2d").drawImage(v, 0,0, c.width,c.height);
   return c.toDataURL("image/jpeg",0.9);
+}
+// Crop to the on-screen box and upscale — reads a framed product name far better than the whole glossy pack.
+function captureNameRegion(){
+  const v=camVideo, vw=v.videoWidth||1280, vh=v.videoHeight||720;
+  const bx=Math.round(vw*0.07), by=Math.round(vh*0.30), bw=Math.round(vw*0.86), bh=Math.round(vh*0.34);
+  const scale=2.6;
+  const c=document.createElement("canvas"); c.width=Math.round(bw*scale); c.height=Math.round(bh*scale);
+  const ctx=c.getContext("2d"); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high";
+  ctx.drawImage(v, bx,by,bw,bh, 0,0,c.width,c.height);
+  try{ const img=ctx.getImageData(0,0,c.width,c.height),D=img.data;
+    for(let i=0;i<D.length;i+=4){ let g=0.299*D[i]+0.587*D[i+1]+0.114*D[i+2]; g=(g-128)*1.4+128; g=g<0?0:g>255?255:g; D[i]=D[i+1]=D[i+2]=g; }
+    ctx.putImageData(img,0,0);
+  }catch(e){}
+  return c.toDataURL("image/jpeg",0.92);
 }
 async function geminiReadDate(dataUrl){
   const b64=dataUrl.split(",")[1];
@@ -3214,6 +3248,19 @@ function getOcrWorker(){
     ocrWorker=w; return w;
   })();
   return ocrWorkerP;
+}
+// A second worker tuned for reading product NAMES: no digit whitelist, auto page segmentation.
+let nameOcrWorker=null, nameOcrWorkerP=null;
+function getNameOcrWorker(){
+  if(nameOcrWorker) return Promise.resolve(nameOcrWorker);
+  if(nameOcrWorkerP) return nameOcrWorkerP;
+  nameOcrWorkerP=(async()=>{
+    await loadTesseract();
+    const w=await Tesseract.createWorker("eng");
+    try{ await w.setParameters({tessedit_pageseg_mode:"3"}); }catch(e){}
+    nameOcrWorker=w; return w;
+  })();
+  return nameOcrWorkerP;
 }
 // Reject nonsense reads (e.g. "2035") — a real best-before is within a sane window of today.
 function plausibleExpiry(iso){
