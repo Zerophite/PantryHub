@@ -42,19 +42,18 @@
 :root[data-theme="dark"] .cathead .cname{color:#84c987}
 :root[data-theme="dark"] .btn.dzlink{border-color:var(--line)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0}
-html{height:100%;height:-webkit-fill-available}
+html,body{margin:0;padding:0;height:100%}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   background:var(--bg); color:var(--ink); overscroll-behavior-y:none;
-  height:100vh; height:-webkit-fill-available; display:flex; flex-direction:column; overflow:hidden;
+  overflow:hidden;
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input,select,textarea{font-family:inherit;font-size:16px}
 
 /* ---------- Header ---------- */
 header{
-  flex:0 0 auto;z-index:40;
+  position:fixed;top:0;left:0;right:0;z-index:40;
   background:linear-gradient(135deg,var(--green),var(--green-d));
   color:#fff;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
   box-shadow:0 2px 8px rgba(0,0,0,.15);
@@ -74,7 +73,7 @@ header{
 
 /* ---------- Tabs ---------- */
 nav.tabs{
-  flex:0 0 auto;z-index:40;
+  position:fixed;bottom:0;left:0;right:0;z-index:40;
   background:var(--card);border-top:1px solid var(--line);
   display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom));
   box-shadow:0 -2px 12px rgba(0,0,0,.06);
@@ -93,7 +92,7 @@ nav.tabs button .badge{position:absolute;transform:translate(14px,-6px);backgrou
 nav.tabs .tabbtn{position:relative}
 
 /* ---------- Content ---------- */
-main{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:12px 12px 90px;max-width:640px;margin:0 auto;width:100%}
+main{position:fixed;left:0;right:0;top:96px;bottom:62px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:12px 12px 24px;max-width:640px;margin:0 auto;width:100%}
 .view{display:none}
 .view.on{display:block}
 
@@ -559,7 +558,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 26 · 2026-09-06</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 27 · 2026-09-06</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2155,6 +2154,16 @@ function switchTab(t){
   { const _m=document.querySelector("main"); if(_m) _m.scrollTop=0; }
 }
 $$(".tabbtn").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+function layoutShell(){
+  const h=document.querySelector("header"), n=document.querySelector("nav.tabs"), m=document.querySelector("main");
+  if(!h||!n||!m) return;
+  m.style.top=h.offsetHeight+"px";
+  m.style.bottom=n.offsetHeight+"px";
+}
+layoutShell();
+["load","resize","orientationchange","pageshow"].forEach(ev=>window.addEventListener(ev,()=>setTimeout(layoutShell,50)));
+if(window.visualViewport) window.visualViewport.addEventListener("resize",()=>setTimeout(layoutShell,50));
+setTimeout(layoutShell,300); setTimeout(layoutShell,900);
 $("#buildStamp") && $("#buildStamp").addEventListener("click",()=>{
   const vv=window.visualViewport, nav=document.querySelector("nav.tabs");
   const nr=nav?nav.getBoundingClientRect():{bottom:0};
