@@ -1883,15 +1883,17 @@ function itemAddedISO(it){
   return todayISO();
 }
 // Fresh produce, bread & bakery start ageing the moment you buy them — not when "opened".
-const _PRODUCE_RE=/\b(banana|apple|orange|pear|peach|nectarine|plum|mango|avocado|kiwi|lemon|lime|grapefruit|coconut|pomegranate|papaya|pineapple|melon|watermelon|cantaloupe|honeydew|grape|cherry|strawberr|blueberr|raspberr|blackberr|cabbage|lettuce|spinach|kale|arugula|broccoli|cauliflower|celery|cucumber|zucchini|eggplant|aubergine|bell pepper|tomato|carrot|beet|radish|turnip|shallot|potato|mushroom|asparagus|okra|squash|pumpkin|bok choy|kangkong|malunggay|sitaw|kalabasa)\b/;
+// Fresh produce (fruits AND vegetables) in the produce category ages from the day it's added — but
+// packaged/preserved forms (Coconut MILK, dried, canned, frozen, sauces…) do NOT.
 function agesFromPurchase(it){
+  if((it.category||"")!=="Fruits & Vegetables") return false;
   const n=(it.name||"").toLowerCase();
-  if(/(dried|dehydrated|canned|jarred|powder|granul|flake|paste|sauce|syrup|jam|jelly|pickled|frozen|juice|chip|crisp|vinegar|extract|seasoning|starch|salt|ground|leaves|\bleaf\b|\bseed\b|sun[- ]?dried)/.test(n)) return false;
-  if((it.category||"")==="Fruits & Vegetables") return true;
-  if(_PRODUCE_RE.test(n)) return true;
-  if(/\bbread\b|\bbun\b|\bbagel\b|\bpita\b|\bnaan\b|\bcroissant\b|\bloaf\b|\bbaguette\b|dinner roll/.test(n)) return true;
-  return false;
+  if(/(dried|dehydrated|canned|jarred|powder|granul|flake|paste|sauce|syrup|jam|jelly|pickled|frozen|juice|milk|cream|chip|crisp|vinegar|extract|seasoning|starch|salt|puree|concentrate|bottle|\bcan\b)/.test(n)) return false;
+  return true;
 }
+// Only real fresh FRUIT gets a ripeness control (not vegetables, not packaged goods).
+const _FRUIT_RE=/\b(banana|apple|orange|pear|peach|nectarine|plum|apricot|mango|avocado|kiwi|lemon|lime|grapefruit|coconut|pomegranate|papaya|pineapple|melon|watermelon|cantaloupe|honeydew|grape|cherry|cherries|strawberr|blueberr|raspberr|blackberr|fig|guava|lychee|persimmon|dragonfruit|starfruit|tangerine|clementine|mandarin|plantain|jackfruit|durian|rambutan|longan)\b/;
+function isFruit(it){ return agesFromPurchase(it) && _FRUIT_RE.test((it.name||"").toLowerCase()); }
 function freshStatus(item){
   // Returns {useBy, daysLeft, label, level} or null
   let useBy=null, source=null;
@@ -2365,7 +2367,7 @@ $$("#segStore button").forEach(b=>b.addEventListener("click",()=>setStore(b.data
 let ripeVal="ripe";
 function setRipe(v){ ripeVal=v; $$("#segRipe button").forEach(b=>b.classList.toggle("on",b.dataset.v===v)); updateFreshInfo(); }
 $$("#segRipe button").forEach(b=>b.addEventListener("click",()=>setRipe(b.dataset.v)));
-function updateRipeVisibility(){ const rf=$("#ripeField"); if(!rf) return; const show=agesFromPurchase({name:$("#fName").value, category:$("#fCat")&&$("#fCat").value}); rf.style.display=show?"":"none"; }
+function updateRipeVisibility(){ const rf=$("#ripeField"); if(!rf) return; rf.style.display=isFruit({name:$("#fName").value, category:$("#fCat")&&$("#fCat").value})?"":"none"; }
 $("#fCat") && $("#fCat").addEventListener("change",updateRipeVisibility);
 $("#fName") && $("#fName").addEventListener("blur",updateRipeVisibility);
 
