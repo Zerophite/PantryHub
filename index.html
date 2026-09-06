@@ -42,18 +42,18 @@
 :root[data-theme="dark"] .cathead .cname{color:#84c987}
 :root[data-theme="dark"] .btn.dzlink{border-color:var(--line)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;padding:0}
+html,body{margin:0;padding:0;height:100%}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   background:var(--bg); color:var(--ink); overscroll-behavior-y:none;
-  padding-bottom:calc(72px + env(safe-area-inset-bottom));
+  height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden;
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input,select,textarea{font-family:inherit;font-size:16px}
 
 /* ---------- Header ---------- */
 header{
-  position:sticky;top:0;z-index:40;
+  flex:0 0 auto;z-index:40;
   background:linear-gradient(135deg,var(--green),var(--green-d));
   color:#fff;padding:calc(12px + env(safe-area-inset-top)) 16px 12px;
   box-shadow:0 2px 8px rgba(0,0,0,.15);
@@ -73,7 +73,7 @@ header{
 
 /* ---------- Tabs ---------- */
 nav.tabs{
-  position:fixed;bottom:0;left:0;right:0;z-index:40;
+  flex:0 0 auto;z-index:40;
   background:var(--card);border-top:1px solid var(--line);
   display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom));
   box-shadow:0 -2px 12px rgba(0,0,0,.06);
@@ -88,7 +88,7 @@ nav.tabs button .badge{position:absolute;transform:translate(14px,-6px);backgrou
 nav.tabs .tabbtn{position:relative}
 
 /* ---------- Content ---------- */
-main{padding:12px 12px 90px;max-width:640px;margin:0 auto}
+main{flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:12px 12px 90px;max-width:640px;margin:0 auto;width:100%}
 .view{display:none}
 .view.on{display:block}
 
@@ -1440,6 +1440,8 @@ const FRESH=[
   [["feuilles de manioc","cassava leaf","dried cassava","manioc seche","dried moringa","dried malunggay","dried spinach"],{fridge:180,freezer:365,pantry:180}],
   // Fruit / fig spreads behave like jam once opened, not like a spice.
   [["fig spread","fig chili spread","fruit spread","fig jam"],{fridge:60,freezer:0,pantry:21}],
+  // Non-food / household items — all zero means no shelf-life is ever computed, so no false "expired".
+  [["parchment paper","aluminum foil","aluminium foil","tin foil","plastic wrap","cling wrap","cling film","saran wrap","wax paper","paper towel","paper napkin","napkin","toilet paper","ziploc","freezer bag","sandwich bag","storage bag","trash bag","garbage bag","toothpick","drinking straw","cupcake liner","muffin liner","baking cup","paper plate","paper cup","dish soap","dishwasher","detergent","laundry","cleaner","bleach","sponge","aluminum tray","foil tray","food wrap","wrapping paper","battery","batteries","light bulb","lighter","matches"],{fridge:0,freezer:0,pantry:0}],
   [["minced garlic","garlic paste","jarred garlic","crushed garlic"],{fridge:90,freezer:180,pantry:1}],
   [["minced ginger","ginger paste","grated ginger"],{fridge:90,freezer:180,pantry:1}],
   [["imitation crab","surimi","kamaboko","fish cake","fishcake"],{fridge:3,freezer:120,pantry:1}],
@@ -2103,7 +2105,7 @@ function renderAll(){
    TABS
    ============================================================ */
 function switchTab(t){
-  if(currentTab===t){ try{ window.scrollTo({top:0,behavior:"smooth"}); }catch(e){ window.scrollTo(0,0); } return; }
+  if(currentTab===t){ const _m=document.querySelector("main"); if(_m){ try{ _m.scrollTo({top:0,behavior:"smooth"}); }catch(e){ _m.scrollTop=0; } } return; }
   currentTab=t;
   $$(".tabbtn").forEach(b=>b.classList.toggle("on",b.dataset.tab===t));
   $$(".view").forEach(v=>v.classList.remove("on"));
@@ -2113,7 +2115,7 @@ function switchTab(t){
   $("#hEmoji").innerHTML=map[t][0]; $("#hTitle").textContent=map[t][1];
   $("#search").placeholder = t==="notes" ? "Search notes…" : "Search pantry & grocery…";
   renderAll();
-  window.scrollTo(0,0);
+  { const _m=document.querySelector("main"); if(_m) _m.scrollTop=0; }
 }
 $$(".tabbtn").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
 
@@ -3542,11 +3544,10 @@ enableSwipeClose($("#settingsSheet"), ()=>settingsScrim.classList.remove("on"));
    ============================================================ */
 const settingsScrim=$("#settingsScrim");
 /* ---- Background scroll lock while any sheet/modal is open (fixes scroll bleeding to the page behind) ---- */
-let _lockY=0;
 function lockScroll(on){
-  const b=document.body;
-  if(on){ _lockY=window.scrollY||window.pageYOffset||0; b.style.position="fixed"; b.style.top=(-_lockY)+"px"; b.style.left="0"; b.style.right="0"; b.style.width="100%"; }
-  else { b.style.position=""; b.style.top=""; b.style.left=""; b.style.right=""; b.style.width=""; window.scrollTo(0,_lockY); }
+  const m=document.querySelector("main"); if(!m) return;
+  if(on){ m.style.overflow="hidden"; m.style.touchAction="none"; }
+  else { m.style.overflow=""; m.style.touchAction=""; }
 }
 (function(){
   let locked=false;
