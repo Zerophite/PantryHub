@@ -558,7 +558,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 32 · 2026-09-06</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 33 · 2026-09-06</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2157,7 +2157,7 @@ $$(".tabbtn").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)
 /* flex shell — no manual sizing needed */
 function _sab(){ try{ const d=document.createElement("div"); d.style.cssText="position:fixed;left:0;bottom:0;width:1px;height:env(safe-area-inset-bottom,0px)"; document.body.appendChild(d); const h=d.offsetHeight; d.remove(); return h; }catch(e){ return -1; } }
 function _mu(u){ try{ const d=document.createElement("div"); d.style.cssText="position:fixed;top:0;left:0;width:1px;height:"+u; document.body.appendChild(d); const h=d.offsetHeight; d.remove(); return h; }catch(e){ return -1; } }
-function showDiag(){ const b=$("#buildStamp"); if(!b) return; const n=document.querySelector("nav.tabs"), r=n?n.getBoundingClientRect():{bottom:0}; b.textContent="Build 32 · sc"+screen.height+" ih"+window.innerHeight+" vh"+_mu("100vh")+" dvh"+_mu("100dvh")+" svh"+_mu("100svh")+" lvh"+_mu("100lvh")+" nb"+Math.round(r.bottom)+" sa"+_sab(); }
+function showDiag(){ const b=$("#buildStamp"); if(!b) return; const n=document.querySelector("nav.tabs"), r=n?n.getBoundingClientRect():{bottom:0}; b.textContent="Build 33 · sc"+screen.height+" ih"+window.innerHeight+" vh"+_mu("100vh")+" dvh"+_mu("100dvh")+" svh"+_mu("100svh")+" lvh"+_mu("100lvh")+" nb"+Math.round(r.bottom)+" sa"+_sab(); }
 showDiag(); setTimeout(showDiag,600);
 window.addEventListener("resize",()=>setTimeout(showDiag,80));
 if(window.visualViewport) window.visualViewport.addEventListener("resize",()=>setTimeout(showDiag,80));
