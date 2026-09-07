@@ -430,7 +430,7 @@ body.viewonly .vobadge{display:block}
 
     <div class="field">
       <label>Item name</label>
-      <input id="fName" placeholder="e.g. Almond Milk" autocomplete="off">
+      <input id="fName" placeholder="e.g. Almond Milk" autocomplete="off" autocapitalize="words">
     </div>
 
     <div class="field">
@@ -558,7 +558,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 34 · 2026-09-07</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 35 · 2026-09-07</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -667,6 +667,7 @@ body.viewonly .vobadge{display:block}
   <div class="chint" id="camHint">Point at the barcode</div>
   <video id="camVideo" playsinline muted autoplay></video>
   <div id="camScanBox"></div>
+  <button id="camSkipDate" style="display:none;position:absolute;left:50%;bottom:150px;transform:translateX(-50%);background:#2e7d32;color:#fff;border:none;padding:13px 24px;border-radius:26px;font-size:16px;font-weight:800;box-shadow:0 6px 18px rgba(0,0,0,.45);z-index:6">⏭️ No date — skip</button>
   <div class="cbar">
     <div class="cmode" id="camModeLabel">BARCODE</div>
     <button class="shutter" id="camShutter"></button>
@@ -2715,6 +2716,7 @@ async function openCamera(mode){
     mode==="name"?"Frame the product NAME inside the box, hold steady, then tap the shutter":"Tap to capture";
   $("#camHint").classList.remove("scanning");
   $("#camScanBox").style.display = mode==="photo"?"none":"block";
+  { const sk=$("#camSkipDate"); if(sk) sk.style.display = (mode==="date")?"block":"none"; }
   $("#camScanBox").classList.remove("scanning");
   try{
     // Ask for a sharp rear-camera feed; fall back to a basic request if the device refuses it
@@ -2770,10 +2772,15 @@ async function startDateScan(){
     scanning=false;
   },1300);
 }
-function _camCloseSmart(){ const wr=rapidMode, dateStep=(camMode==="date"); closeCamera();
-  if(wr && dateStep){ toast("No date on the pack? Just tap Save & scan next","good"); return; }   // keep the loop; form stays filled
-  if(wr){ rapidMode=false; if(!$("#fName").value.trim()) closeItemSheet(); }
+function _camCloseSmart(){ const dateStep=(camMode==="date"); closeCamera(); rapidMode=false; chainDate=false;
+  if(dateStep){ toast("Set a date below if you want, then Save","good"); return; }   // land on the filled form
+  if(!$("#fName").value.trim()) closeItemSheet();
 }
+$("#camSkipDate") && $("#camSkipDate").addEventListener("click",()=>{
+  $("#fExp").value=""; if(typeof fillSelectsFromExp==="function") fillSelectsFromExp();
+  const wasRapid=rapidMode; closeCamera();
+  if(wasRapid){ rapidSaveAndNext(); }
+});
 $("#camClose").addEventListener("click",_camCloseSmart);
 $("#camCancel2").addEventListener("click",_camCloseSmart);
 
@@ -3098,7 +3105,7 @@ function applyBarcodeResult(nm, catGuess, imgUrl){
   if(imgUrl){ pendingPhoto=imgUrl; showPhoto(pendingPhoto); }
   updateFreshInfo();
   toast("✓ Detected: "+nm,"good");
-  chainDate=false;
+  if(chainDate){ chainDate=false; setTimeout(()=>{ if($("#itemScrim").classList.contains("on")) openCamera("date"); }, 450); }
 }
 // Find a product photo by name (Open Food Facts search). Name matching is approximate — user confirms by saving.
 async function findImageByName(){
