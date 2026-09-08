@@ -560,7 +560,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 38 · 2026-09-07</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 39 · 2026-09-08</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1755,17 +1755,20 @@ function markPhotoUp(id){ const st=photoUpSet(); if(!st.has(id)){ st.add(id); tr
 function ensureCloudPhoto(id,data,force){ if(!id||!data||!window.Photos) return; if(typeof canEdit==="function" && !canEdit()) return; if(!force && photoUpSet().has(id)) return; window.Photos.save(id,data).then(ok=>{ if(ok) markPhotoUp(id); }); }
 function hydratePhotos(){ try{ document.querySelectorAll("img.lazyphoto").forEach(img=>{ if(img.dataset.done) return; const id=img.dataset.pid;
   if(_photoMem[id]){ img.src=_photoMem[id]; img.dataset.done="1"; return; }
-  idbGet(id).then(d=>{
-    if(d){ _photoMem[id]=d; img.src=d; img.dataset.done="1"; ensureCloudPhoto(id,d); return; }
-    const bc=img.dataset.bc;
-    const done=()=>{ img.dataset.done="1"; };
-    const cache=(p)=>{ _photoMem[id]=p; try{ idbPut(id,p); }catch(e){} img.src=p; };
-    const nmv=img.dataset.nm||"";
-    const tryName=()=>{ const k=(typeof nameKey==="function")?nameKey(nmv):""; if(k && window.Products){ window.Products.get(k).then(g=>{ if(g && typeof g.photo==="string" && g.photo.startsWith("data:")) cache(g.photo); done(); }).catch(done); } else done(); };
-    const tryProducts=()=>{ if(bc && window.Products){ window.Products.get(bc).then(sp=>{ if(sp && typeof sp.photo==="string" && sp.photo.startsWith("data:")){ cache(sp.photo); done(); } else tryName(); }).catch(tryName); } else tryName(); };
-    if(window.Photos){ window.Photos.get(id).then(p=>{ if(typeof p==="string" && p.startsWith("data:")){ cache(p); done(); } else tryProducts(); }).catch(tryProducts); }
-    else tryProducts();
-  });
+  const bc=img.dataset.bc, nmv=img.dataset.nm||"";
+  const done=()=>{ img.dataset.done="1"; };
+  const ok=p=>typeof p==="string" && p.startsWith("data:");
+  // SHARED image (by barcode, then by name) is the source of truth — cached for the session only,
+  // so an admin changing an image propagates to every account on the next reload.
+  const useShared=(p)=>{ _photoMem[id]=p; img.src=p; done(); };
+  const usePerId=(p)=>{ _photoMem[id]=p; try{ idbPut(id,p); }catch(e){} img.src=p; done(); };
+  // Per-item photo (by id) is the fallback: a genuinely custom photo, or offline.
+  const tryPerId=()=>{ idbGet(id).then(d=>{ if(ok(d)){ ensureCloudPhoto(id,d); return usePerId(d); }
+    if(window.Photos){ window.Photos.get(id).then(p=>{ if(ok(p)) return usePerId(p); done(); }).catch(done); } else done();
+  }); };
+  const tryName=()=>{ const k=(typeof nameKey==="function")?nameKey(nmv):""; if(k && window.Products){ window.Products.get(k).then(g=>{ if(g && ok(g.photo)) return useShared(g.photo); tryPerId(); }).catch(tryPerId); } else tryPerId(); };
+  const tryBc=()=>{ if(bc && window.Products){ window.Products.get(bc).then(sp=>{ if(sp && ok(sp.photo)) return useShared(sp.photo); tryName(); }).catch(tryName); } else tryName(); };
+  tryBc();
 }); }catch(e){} }
 // One-time: move any base64 photos (from state, the old localStorage store, and the products cache) into IndexedDB.
 function migratePhotos(){
