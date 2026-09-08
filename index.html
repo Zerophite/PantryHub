@@ -420,12 +420,12 @@ body.viewonly .vobadge{display:block}
 
     <div class="photobox" id="photoBox">
       <img class="pv" id="photoPreview" alt="">
-      <div id="photoHint">📷 No photo yet</div>
+      <div id="photoHint">🖼️ No photo yet</div>
       <div class="chipbtns">
         <button class="chip" id="chipGoogleImg" style="display:none">🔎 Search Google Images</button>
         <button class="chip" id="chipPasteImg">📋 Paste image</button>
-        <button class="chip" id="chipReadName">📷 Scan the name</button>
-        <button class="chip" id="chipPhoto">🖼️ Add your own photo</button>
+        <button class="chip" id="chipReadName">🔤 Scan the name</button>
+        <button class="chip" id="chipPhoto">⬆️ Add your own photo</button>
       </div>
     </div>
     <div class="sub-hint">Scanning the barcode is the reliable way to auto-fill the name (looks it up in a food database). “Find image” searches by the name you typed. Or add your own photo.</div>
@@ -446,7 +446,7 @@ body.viewonly .vobadge{display:block}
     </div>
 
     <div class="field">
-      <label>Where it lives</label>
+      <label>Where it’s stored</label>
       <div class="seg" id="segStore">
         <button data-v="pantry" class="on">🧺 Pantry</button>
         <button data-v="fridge">❄️ Fridge</button>
@@ -560,7 +560,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 39 · 2026-09-08</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 42 · 2026-09-08</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2528,7 +2528,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
       const jobs=[]; if(bc) jobs.push(window.Products.save(bc,info));
       const k=nameKey(data.name); if(k) jobs.push(window.Products.save(k,info));
       if(!jobs.length) return;
-      Promise.all(jobs).then(rs=>{ const okAll=rs.every(Boolean); toast(okAll?(ph?"📤 Shared to everyone (name + image)":"📤 Shared to everyone"):"⚠️ Shared save failed — check the Firestore rule", okAll?"good":"warn"); });
+      Promise.all(jobs).then(rs=>{ const okAll=rs.every(Boolean); if(okAll && bc) markPub(bc,data.name,data.category,!!ph); toast(okAll?(ph?"📤 Shared to everyone (name + image)":"📤 Shared to everyone"):"⚠️ Shared save failed — check the Firestore rule", okAll?"good":"warn"); });
     };
     if(_realNow) _share(_realNow); else resolveItemPhoto(_id, bc, data.name).then(_share);
   }
@@ -2687,9 +2687,9 @@ function showPhoto(url){
   const pv=$("#photoPreview"), hint=$("#photoHint");
   const show=u=>{ pv.src=u; pv.style.display="block"; hint.textContent="Tap “Add photo” to replace"; };
   if(typeof url==="string" && (url.startsWith("data:")||url.startsWith("http"))){ show(url); return; }
-  pv.style.display="none"; pv.removeAttribute("src"); hint.textContent="📷 No photo yet";
+  pv.style.display="none"; pv.removeAttribute("src"); hint.textContent="🖼️ No photo yet";
   if(url==="L"){ hint.textContent="Loading photo…";
-    resolveItemPhoto(editingId, pendingBarcode, ($("#fName")&&$("#fName").value)||"").then(p=>{ if(p){ pendingPhoto=p; show(p); } else hint.textContent="📷 No photo yet"; });
+    resolveItemPhoto(editingId, pendingBarcode, ($("#fName")&&$("#fName").value)||"").then(p=>{ if(p){ pendingPhoto=p; show(p); } else hint.textContent="🖼️ No photo yet"; });
   }
 }
 // compress an image element/canvas to small jpeg dataURL
@@ -3745,30 +3745,35 @@ $("#btnAdminUnlock").addEventListener("click",async()=>{
   if(h===window.ADMIN_SHA256){ try{ localStorage.setItem("pantry_admin", window.CURRENT_PANTRY||"local"); }catch(e){} $("#adminCode").value=""; updateAdminState(); toast("✅ Admin mode unlocked for this pantry","good"); }
   else toast("Wrong code","warn");
 });
+const PUBSIG_KEY="pantry_pub_sig_v1";
+function pubSigStore(){ try{ return JSON.parse(localStorage.getItem(PUBSIG_KEY)||"{}"); }catch(e){ return {}; } }
+function pubSigOf(name,category,present){ return (name||"")+"§"+(category||"")+"§"+(present?"1":"0"); }
+function markPub(bc,name,category,present){ if(!bc) return; try{ const o=pubSigStore(); o[bc]=pubSigOf(name,category,present); localStorage.setItem(PUBSIG_KEY,JSON.stringify(o)); }catch(e){} }
 $("#btnAdminPublishAll").addEventListener("click",async()=>{
   if(!window.Products){ alert("Not connected to the cloud database — open an online pantry first."); return; }
   const withBc=state.items.filter(i=>i.barcode);
-  if(!withBc.length){ alert("None of your items have a stored barcode yet.\n\nScan an item's barcode (Add Item) and Save — then it can be shared."); return; }
-  if(!confirm("Publish "+withBc.length+" of your items (the ones with a barcode) to the shared database?\n\nIt shares each one's current name, category, and photo with everyone — so make sure those are correct first.")) return;
-  toast("Publishing "+withBc.length+" item(s)…","good");
+  if(!withBc.length){ alert("None of your items have a stored barcode yet. Scan an item's barcode (Add Item) and Save first."); return; }
+  const sig=pubSigStore();
+  const changed=withBc.filter(it=>{ const present = it.photo==="L" ? true : !!it.photo; return sig[it.barcode]!==pubSigOf(it.name,it.category,present); });
+  if(!changed.length){ alert("✅ Everything is already published ("+withBc.length+" item(s)). Your saves publish automatically, so there is usually nothing to do here."); return; }
+  if(!confirm("Publish "+changed.length+" new / changed item(s) to the shared database?  ("+(withBc.length-changed.length)+" are already up to date.)")) return;
+  toast("Publishing "+changed.length+" item(s)…","good");
   let ok=0, fail=0;
-  for(const it of withBc){ let ph=it.photo; if(ph==="L"){ ph=_photoMem[it.id]||await idbGet(it.id)||null; } const r=await window.Products.save(it.barcode,{name:it.name,category:it.category,photo:ph||null}); if(r) ok++; else fail++; }
-  alert("Done — published "+ok+" item(s)"+(fail?(", "+fail+" failed"):"")+" to the shared database.");
+  for(const it of changed){ let ph=it.photo; if(ph==="L"){ ph=_photoMem[it.id]||await idbGet(it.id)||null; } const r=await window.Products.save(it.barcode,{name:it.name,category:it.category,photo:ph||null}); const k=(typeof nameKey==="function")?nameKey(it.name):""; if(k) await window.Products.save(k,{name:it.name,category:it.category,photo:ph||null}); if(r){ ok++; markPub(it.barcode,it.name,it.category,!!ph); } else fail++; }
+  alert("Done — published "+ok+" item(s)"+(fail?(", "+fail+" failed"):"")+".  "+(withBc.length-changed.length)+" were already up to date.");
 });
 $("#btnAdminUploadPhotos").addEventListener("click",async()=>{
   if(!window.Photos){ alert("Open a cloud pantry first."); return; }
-  const withPhoto=state.items.filter(i=>i.photo==="L");
-  if(!withPhoto.length){ alert("No stored photos to upload yet.\n\n(Photos show as blank for shared viewers only if this pantry has custom images. Add one, then upload.)"); return; }
-  toast("Uploading "+withPhoto.length+" photo(s)…","good");
+  const all=state.items.filter(i=>i.photo==="L");
+  if(!all.length){ alert("No stored photos to upload yet. Add a photo, then upload."); return; }
+  const up=photoUpSet();
+  const todo=all.filter(i=>!up.has(i.id));
+  if(!todo.length){ alert("✅ All "+all.length+" of your photos are already uploaded. Photos upload automatically when you add them, so there is usually nothing to do here."); return; }
+  toast("Uploading "+todo.length+" photo(s)…","good");
   let ok=0, fail=0, missing=0;
-  for(const it of withPhoto){
-    let data=_photoMem[it.id]; if(!data) data=await idbGet(it.id);
-    if(!data){ missing++; continue; }
-    const r=await window.Photos.save(it.id,data);
-    if(r){ ok++; markPhotoUp(it.id); } else fail++;
-  }
-  if(fail && !ok){ alert("❌ Upload FAILED for all photos.\n\nThe 'itemphotos' Firestore rule is probably missing or not published. In Firebase → Firestore → Rules, add inside your documents block:\n\nmatch /itemphotos/{id} {\n  allow read: if request.auth != null;\n  allow write: if request.auth != null;\n}\n\nthen click PUBLISH and try again."); return; }
-  alert("☁️ Uploaded "+ok+" photo(s)"+(fail?(", "+fail+" failed"):"")+(missing?(", "+missing+" had no local image"):"")+".\n\nYour shared viewers should see them now — have them reopen the app.");
+  for(const it of todo){ let data=_photoMem[it.id]; if(!data) data=await idbGet(it.id); if(!data){ missing++; continue; } const r=await window.Photos.save(it.id,data); if(r){ ok++; markPhotoUp(it.id); } else fail++; }
+  if(fail && !ok){ alert("❌ Upload FAILED for all photos — the 'itemphotos' Firestore rule is probably missing or not published. Add it in Firebase and try again."); return; }
+  alert("☁️ Uploaded "+ok+" new photo(s)"+(fail?(", "+fail+" failed"):"")+(missing?(", "+missing+" had no local image"):"")+".  "+(all.length-todo.length)+" were already up to date.");
 });
 $("#btnAdminLogout").addEventListener("click",()=>{ try{ localStorage.removeItem("pantry_admin"); }catch(e){} updateAdminState(); toast("🔒 Logged out of admin","good"); });
 let _usageChecked=false;
