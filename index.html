@@ -560,7 +560,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 43 · 2026-09-08</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 44 · 2026-09-09</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2289,14 +2289,17 @@ searchEl.addEventListener("input",()=>{
   if(currentTab==="notes"){ filterNotes(); } else renderAll();
 });
 searchEl.addEventListener("keydown",e=>{
-  if(e.key==="Enter" && searchQ){
-    const found=state.items.find(i=>i.name.toLowerCase().includes(searchQ));
-    if(found){
-      const where=found.location==="pantry"?"in your PANTRY":"on your GROCERY list";
-      const extra=found.percent!=null?` (${found.percent}% left)`:"";
-      toast(`✅ “${found.name}” is ${where}${extra}`,"good");
-    }else{
-      toast(`❌ “${searchEl.value.trim()}” is NOT in your pantry`,"warn");
+  if(e.key==="Enter"){
+    e.preventDefault(); searchEl.blur();   // just close the keyboard — this NEVER adds anything
+    if(searchQ){
+      const found=state.items.find(i=>i.name.toLowerCase().includes(searchQ));
+      if(found){
+        const where=found.location==="pantry"?"in your Pantry":"on your Grocery list";
+        const extra=found.percent!=null?` (${found.percent}% left)`:"";
+        toast(`🔎 Found “${found.name}” — ${where}${extra}`,"good");
+      }else{
+        toast(`🔎 “${searchEl.value.trim()}” — not in your pantry yet`,"warn");
+      }
     }
   }
 });
@@ -2325,6 +2328,7 @@ function setCatSelect(c){
 }
 
 function openItemSheet(id){
+  scanGen++;
   editingId=id||null;
   backupForId=null;
   populateCatSelect();
@@ -2362,7 +2366,7 @@ function openItemSheet(id){
   try{ $("#itemSheet").scrollTop=0; }catch(e){}
   requestAnimationFrame(()=>{ try{ $("#itemSheet").scrollTop=0; }catch(e){} });
 }
-function closeItemSheet(){ itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; backupForId=null; chainDate=false; rapidMode=false; }
+function closeItemSheet(){ scanGen++; itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; backupForId=null; chainDate=false; rapidMode=false; }
 
 $("#fabAdd").addEventListener("click",()=>{
   if(!requireEdit()) return;
@@ -2586,6 +2590,7 @@ let pendingPhoto=null;
 let pendingBarcode=null;
 let chainDate=false;   // after a barcode scan, auto-open the expiry-date scanner
 let rapidMode=false;   // hands-free loop: barcode -> date -> auto-save -> next barcode
+let scanGen=0;         // scan-session token — a slow barcode lookup is dropped once the sheet closes or a new scan begins
 let backupForId=null;
 function normName(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
 // Fresh produce the app recognises by name (so "Apple" and "Apples" share one image key). Specific first.
@@ -3075,7 +3080,9 @@ async function groceryScanBarcode(code){
 }
 
 async function lookupBarcode(code){
+  const myGen=scanGen;                                                    // this scan session
   pendingBarcode=code;
+  { const bf=$("#fBarcode"); if(bf && !bf.value.trim()) bf.value=code; }  // show the scanned number right away
   // Already have this exact product in the pantry/grocery? Offer to edit instead of duplicating.
   const dup=state.items.find(i=>i.barcode===code);
   if(dup && dup.id!==editingId){ offerDuplicate(dup); return; }
@@ -3089,6 +3096,7 @@ async function lookupBarcode(code){
   // Shared product database (admin-curated) before hitting the internet
   if(window.Products){
     try{ const sp=await window.Products.get(code);
+      if(myGen!==scanGen) return;
       if(sp && (sp.name||sp.photo)){ rememberProduct(code,{name:sp.name,category:sp.category,photo:sp.photo});
         applyBarcodeResult(sp.name||"", sp.category||null, sp.photo||null);
         toast("✓ From the shared product database","good"); return; } }catch(e){}
@@ -3098,6 +3106,7 @@ async function lookupBarcode(code){
   try{
     const r=await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,categories_tags,image_front_small_url`);
     const j=await r.json();
+    if(myGen!==scanGen) return;
     if(j.status===1 && j.product && (j.product.product_name||j.product.brands)){
       const p=j.product;
       const nm=[p.brands?p.brands.split(",")[0]:"",p.product_name].filter(Boolean).join(" ").trim() || ("Product "+code);
@@ -3113,6 +3122,7 @@ async function lookupBarcode(code){
     const key="DEMO_KEY";
     const r=await fetch(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${key}&query=${encodeURIComponent(code)}&dataType=Branded&pageSize=1`);
     const j=await r.json();
+    if(myGen!==scanGen) return;
     const f=j && j.foods && j.foods[0];
     if(f && (f.description||f.brandName||f.brandOwner)){
       const brand=(f.brandName||f.brandOwner||"").trim();
@@ -3123,6 +3133,7 @@ async function lookupBarcode(code){
       return;
     }
   }catch(e){}
+  if(myGen!==scanGen) return;
   const bf=$("#fBarcode"); if(bf && !bf.value.trim()) bf.value=code;   // fill the scanned number automatically
   toast(isAdmin()?"Not in the database — its barcode is filled in. Type the name + add a photo, then Save to share it.":"Not in the database — its barcode is filled in. Type the name (and add a photo) and Save; I'll remember it.","warn");
   rapidMode=false;   // this item needs attention — stop the hands-free loop
@@ -3132,6 +3143,7 @@ async function lookupBarcode(code){
 }
 // Fill the add-item form from a barcode result
 function applyBarcodeResult(nm, catGuess, imgUrl){
+  if(!itemScrim.classList.contains("on")) return;   // sheet was closed during a slow lookup — don't leak into it
   if(pendingBarcode) $("#fBarcode").value=pendingBarcode;
   const dupN=sameNameItem(nm);
   if(dupN && dupN.id!==editingId && !backupForId){ offerDuplicate(dupN); return; }
