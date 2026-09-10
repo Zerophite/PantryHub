@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#2e7d32">
+<link rel="preconnect" href="https://www.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://firestore.googleapis.com" crossorigin>
+<link rel="preconnect" href="https://identitytoolkit.googleapis.com" crossorigin>
 <title>PantryHub</title>
 <!-- Add-to-Home-Screen: names the icon "PantryHub" -->
 <meta name="application-name" content="PantryHub">
@@ -562,7 +565,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 46 · 2026-09-10</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 47 · 2026-09-10</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1685,6 +1688,18 @@ function shelfLife(name,cat){
   if(cat && CAT_SHELF[cat]) return CAT_SHELF[cat];
   return null;
 }
+// Recommend where to keep an item, from its shelf-life numbers. Unopened shelf-stable -> pantry;
+// once opened, the fridge usually wins. Returns "pantry" | "fridge" | "freezer" | null (no guidance).
+function bestStore(sl, opened){
+  if(!sl) return null;
+  const f=sl.fridge||0, z=sl.freezer||0, p=sl.pantry||0;
+  if(!f && !z && !p) return null;
+  if(!opened){ if(p>0) return "pantry"; if(f>0) return "fridge"; return "freezer"; }
+  if(f>0 && (f>=p || p<=2)) return "fridge";
+  if(p>0) return "pantry";
+  if(z>0) return "freezer";
+  return "fridge";
+}
 
 /* ---------- State ---------- */
 let state={items:[],notes:[],settings:{sort:"category"},catPrefs:{}};
@@ -2218,9 +2233,14 @@ function markOpened(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
   it.opened=todayISO();
+  const _rec=bestStore(shelfLife(it.name,it.category),true);
+  let _moved=false;
+  if(_rec && it.store!==_rec){ it.store=_rec; _moved=true; }
   save(); renderAll();
   const fs=freshStatus(it);
-  toast(fs?`📂 “${it.name}” opened · best used within ${fs.daysLeft} day(s)`:`📂 “${it.name}” marked opened`,"good");
+  const _where={pantry:"Pantry",fridge:"Fridge",freezer:"Freezer"}[it.store]||it.store;
+  if(_moved) toast(`📂 Opened — moved to the ${_where}${fs?" · best within "+fs.daysLeft+" day(s)":""}`,"good");
+  else toast(fs?`📂 “${it.name}” opened · best used within ${fs.daysLeft} day(s)`:`📂 “${it.name}” marked opened`,"good");
 }
 function markUnopened(id){
   if(!requireEdit()) return;
@@ -2360,7 +2380,7 @@ function openItemSheet(id){
   $("#fVac").checked=!!(it&&it.vac);
   { const bc=$("#fByCount"); if(bc){ bc.checked = it ? usesCount(it) : false; } }
   $("#fNote").value=it?it.note:"";
-  setStore(it?it.store:"pantry");
+  setStore(it?it.store:"pantry"); storeTouched=!!it;
   setRipe((it&&it.ripe)||"ripe"); updateRipeVisibility();
   updatePct();
   // photo
@@ -2392,9 +2412,9 @@ $("#btnCancelItem").addEventListener("click",closeItemSheet);
 itemScrim.addEventListener("click",e=>{ if(e.target===itemScrim) closeItemSheet(); });
 
 // store segment
-let storeVal="pantry";
+let storeVal="pantry", storeTouched=false;
 function setStore(v){ storeVal=v; $$("#segStore button").forEach(b=>b.classList.toggle("on",b.dataset.v===v)); updateFreshInfo(); }
-$$("#segStore button").forEach(b=>b.addEventListener("click",()=>setStore(b.dataset.v)));
+$$("#segStore button").forEach(b=>b.addEventListener("click",()=>{ storeTouched=true; setStore(b.dataset.v); }));
 let ripeVal="ripe";
 function setRipe(v){ ripeVal=v; $$("#segRipe button").forEach(b=>b.classList.toggle("on",b.dataset.v===v)); updateFreshInfo(); }
 $$("#segRipe button").forEach(b=>b.addEventListener("click",()=>setRipe(b.dataset.v)));
@@ -2440,8 +2460,16 @@ function updateFreshInfo(){
   const opened=$("#fOpen").value;
   const exp=$("#fExp").value;
   const vac=$("#fVac")?$("#fVac").checked:false;
-  const tmp={name:nm,store:storeVal,opened:opened||null,exp:exp||null,vac};
   const sl=shelfLife(nm, $("#fCat")&&$("#fCat").value);
+  // Recommend a spot and auto-select it for a fresh add (until the user picks one themselves).
+  const rec=bestStore(sl, !!opened);
+  if(rec && !storeTouched && rec!==storeVal){ storeVal=rec; $$("#segStore button").forEach(b=>b.classList.toggle("on",b.dataset.v===rec)); }
+  const tmp={name:nm,store:storeVal,opened:opened||null,exp:exp||null,vac};
+  let recLine="";
+  if(rec){ const f=sl.fridge||0; const cap={pantry:"Pantry",fridge:"Fridge",freezer:"Freezer"}[rec];
+    if(!opened && rec==="pantry" && f>0) recLine=`🏷️ Keep in the <b>Pantry</b> now — move to the <b>Fridge</b> once opened.`;
+    else recLine=`🏷️ Best kept in the <b>${cap}</b>${opened?" now it's open":""}.`;
+  }
   let html="";
   if(opened && sl){
     let d=sl[storeVal]??sl.pantry;
@@ -2460,8 +2488,9 @@ function updateFreshInfo(){
     html+=`💡 Once opened: ${parts.join(" · ")}. Set the “Date opened” to start the timer.`;
   }
   const fs=freshStatus(tmp);
-  if(fs){ box.className="freshbox "+(fs.level==="bad"?"bad":fs.level==="warn"?"warn":""); box.innerHTML=(html?html+"<br>":"")+`⏱️ <b>${fs.label}</b> (use by ${fs.useBy})`; }
-  else if(html){ box.className="freshbox"; box.innerHTML=html; }
+  const lead = recLine ? recLine+"<br>" : "";
+  if(fs){ box.className="freshbox "+(fs.level==="bad"?"bad":fs.level==="warn"?"warn":""); box.innerHTML=lead+(html?html+"<br>":"")+`⏱️ <b>${fs.label}</b> (use by ${fs.useBy})`; }
+  else if(html||recLine){ box.className="freshbox"; box.innerHTML=lead+html; }
   else { box.className=""; box.innerHTML=""; }
 }
 
@@ -3934,11 +3963,13 @@ if(window.CLOUD){
   const V="10.12.0";
   const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`);
   const { getAuth, onAuthStateChanged, signInAnonymously } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`);
-  const { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, collection, getCountFromServer } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
+  const { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, collection, getCountFromServer } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
 
   const app=initializeApp(window.FIREBASE_CONFIG);
   const auth=getAuth(app);
-  const db=getFirestore(app);
+  let db;
+  try{ db=initializeFirestore(app,{ localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) }); }
+  catch(e){ db=getFirestore(app); }   // fall back if the browser blocks IndexedDB
   const $=s=>document.querySelector(s);
   const overlay=$("#cloudOverlay"), pantryCard=$("#pantryCard");
   let uid=null;
