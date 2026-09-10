@@ -565,7 +565,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 47 · 2026-09-10</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 51 · 2026-09-10</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1682,10 +1682,28 @@ const CAT_SHELF={
   "Dried":{fridge:180,freezer:365,pantry:180},
   "Other":{fridge:14,freezer:90,pantry:30}
 };
+// ---- Smarter shelf-life matching ------------------------------------------------
+// A fruit/veg WORD inside a packaged product ("Strawberry Lemonade", "Strawberry Jam")
+// must NOT be read as fresh produce. We flag packaged/drink products (by name signals or
+// by category) and skip bare-produce matches for them. shelfLife also reports what it
+// matched on (_basis) so the reasoning behind an estimate is visible to the user.
+const _PRODUCE_RE=/(strawberr|blueberr|raspberr|blackberr|cranberr|banana|apple|orange|pear|peach|nectarine|plum|apricot|mango|avocado|kiwi|lemon|lime|grapefruit|coconut|pomegranate|papaya|pineapple|melon|watermelon|cantaloupe|honeydew|grape|cherr|guava|lychee|persimmon|tangerine|clementine|mandarin|plantain|jackfruit|onion|garlic|ginger|carrot|broccoli|cauliflower|spinach|lettuce|cabbage|cucumber|celery|mushroom|zucchini|eggplant|okra|sprout|tomato|potato|kale|beet|radish|turnip|leek|scallion|shallot|kangkong|malunggay|sitaw|bok choy|pechay|kalabasa)/;
+const _NOT_FRESH=/juice|lemonade|\bade\b|drink|soda|cola|nectar|cordial|squash|punch|smoothie|shake|flavou?r|bottled|\bbottle\b|canned|\bcan\b|\bjar\b|syrup|\bjam\b|jelly|preserve|marmalade|sauce|ketchup|paste|puree|concentrate|powder|dried|dehydrated|chip|crisp|candy|gummy|yogurt|yoghurt|cream|popsicle|sorbet|jello|gelatin|extract|essence|\btea\b|coffee|latte|frappe|cider|wine|beer|liqueur|vodka|spirit|milk|vinegar|pickle|frozen/;
+const _PACKAGED_CAT=/Beverage|Condiment|Sauce|Oil|Canned|Soup|Baking|Snack|Season|Spice|Dried|Supplement|Pasta|Grain|Noodle|Dairy|Frozen/i;
+function prettyKw(k){ k=(k||"").replace(/berr$/,"berry"); return k.charAt(0).toUpperCase()+k.slice(1); }
 function shelfLife(name,cat){
   const n=(name||"").toLowerCase();
-  for(const [kws,d] of FRESH){ for(const kw of kws){ if(n.includes(kw)) return d; } }
-  if(cat && CAT_SHELF[cat]) return CAT_SHELF[cat];
+  const packaged = _NOT_FRESH.test(n) || (cat && _PACKAGED_CAT.test(cat));
+  let best=null, bestLen=-1;
+  for(const [kws,d] of FRESH){
+    for(const kw of kws){
+      if(!n.includes(kw)) continue;
+      if(packaged && _PRODUCE_RE.test(kw) && !_NOT_FRESH.test(kw)) continue;   // packaged item just mentioning a fruit/veg
+      if(kw.length>bestLen){ bestLen=kw.length; best={d, kw}; }                // most-specific keyword wins
+    }
+  }
+  if(best) return Object.assign({_basis:prettyKw(best.kw)}, best.d);
+  if(cat && CAT_SHELF[cat]) return Object.assign({_basis:"cat:"+cat}, CAT_SHELF[cat]);
   return null;
 }
 // Recommend where to keep an item, from its shelf-life numbers. Unopened shelf-stable -> pantry;
@@ -1694,7 +1712,7 @@ function bestStore(sl, opened){
   if(!sl) return null;
   const f=sl.fridge||0, z=sl.freezer||0, p=sl.pantry||0;
   if(!f && !z && !p) return null;
-  if(!opened){ if(p>0) return "pantry"; if(f>0) return "fridge"; return "freezer"; }
+  if(!opened){ if(p>=30) return "pantry"; if(f>0 && f>p) return "fridge"; if(p>0) return "pantry"; return "freezer"; }
   if(f>0 && (f>=p || p<=2)) return "fridge";
   if(p>0) return "pantry";
   if(z>0) return "freezer";
@@ -1915,10 +1933,16 @@ function itemAddedISO(it){
 // Fresh produce (fruits AND vegetables) in the produce category ages from the day it's added — but
 // packaged/preserved forms (Coconut MILK, dried, canned, frozen, sauces…) do NOT.
 function agesFromPurchase(it){
-  if((it.category||"")!=="Fruits & Vegetables") return false;
-  const n=(it.name||"").toLowerCase();
-  if(/(dried|dehydrated|canned|jarred|powder|granul|flake|paste|sauce|syrup|jam|jelly|pickled|frozen|juice|milk|cream|chip|crisp|vinegar|extract|seasoning|starch|salt|puree|concentrate|bottle|\bcan\b)/.test(n)) return false;
-  return true;
+  const cat=(it.category||""); const n=(it.name||"").toLowerCase();
+  // Packaged / preserved / long-life forms never age from the purchase date.
+  if(/(dried|dehydrated|canned|jarred|\bcan\b|powder|granul|flake|paste|sauce|syrup|jam|jelly|pickled|frozen|uht|long.?life|evaporated|condensed|instant|cured|jerky|smoked|sterili|shelf.?stable)/.test(n)) return false;
+  if(cat==="Fruits & Vegetables" || cat==="Fruit/Veggies"){
+    if(/(juice|milk|cream|chip|crisp|vinegar|extract|seasoning|starch|salt|puree|concentrate|bottle)/.test(n)) return false;
+    return true;
+  }
+  // Other genuinely-perishable fresh foods that usually have no (or only a short) printed date.
+  if(/(bread|\bbun\b|buns|bagel|baguette|croissant|brioche|\broll\b|rolls|\bpita\b|tortilla|naan|flatbread|muffin|pastry|scone|donut|doughnut|chicken|\bbeef\b|\bpork\b|turkey|\blamb\b|\bveal\b|\bfish\b|salmon|tilapia|\bcod\b|halibut|trout|bangus|shrimp|prawn|\bcrab\b|lobster|scallop|mussel|clam|oyster|squid|\bmeat\b|steak|\bmince\b|sausage|tofu|tempeh|\begg\b|eggs|\bmilk\b|yogurt|yoghurt|\bcheese\b|deli)/.test(n)) return true;
+  return false;
 }
 // Only real fresh FRUIT gets a ripeness control (not vegetables, not packaged goods).
 const _FRUIT_RE=/\b(banana|apple|orange|pear|peach|nectarine|plum|apricot|mango|avocado|kiwi|lemon|lime|grapefruit|coconut|pomegranate|papaya|pineapple|melon|watermelon|cantaloupe|honeydew|grape|cherry|cherries|strawberr|blueberr|raspberr|blackberr|fig|guava|lychee|persimmon|dragonfruit|starfruit|tangerine|clementine|mandarin|plantain|jackfruit|durian|rambutan|longan)\b/;
@@ -1998,7 +2022,7 @@ function itemCardHTML(it,mode,showCat,opts){
   else if(showCat){ sub.push(`<span class="pill cat">${catIco} ${it.category}</span>`); }
   if(it.qty) sub.push(`<span>${escapeHtml(it.qty)}</span>`);
   if(fine && mode!=="grocery"){ sub.push(`<span class="pill ${fine.expired?'bad':'warn'}">${fine.txt}</span>`); }
-  else if(fs && mode!=="grocery"){ sub.push(`<span class="pill ${fs.level==='bad'?'bad':fs.level==='warn'?'warn':'ok'}">${fs.level==='ok'?'🟢':fs.level==='warn'?'⏳':'⚠️'} ${fs.label}</span>`); }
+  else if(fs && mode!=="grocery"){ sub.push(`<span class="pill ${fs.level==='bad'?'bad':fs.level==='warn'?'warn':'ok'}">${fs.level==='ok'?'🟢':fs.level==='warn'?'⏳':'⚠️'} ${fs.source==='bought'?'≈ ':''}${fs.label}</span>`); }
   if(mode!=="grocery" && it.opened && !agesFromPurchase(it)) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
   else if(mode!=="grocery" && !it.opened && !agesFromPurchase(it) && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
   if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
@@ -2470,6 +2494,8 @@ function updateFreshInfo(){
     if(!opened && rec==="pantry" && f>0) recLine=`🏷️ Keep in the <b>Pantry</b> now — move to the <b>Fridge</b> once opened.`;
     else recLine=`🏷️ Best kept in the <b>${cap}</b>${opened?" now it's open":""}.`;
   }
+  let basisLine="";
+  if(sl && sl._basis){ basisLine = /^cat:/.test(sl._basis) ? `ⓘ Estimate from the <b>${sl._basis.slice(4)}</b> category — set a date if you have one.` : `ⓘ Reading this as <b>${sl._basis}</b>. Not right? Just set the date yourself.`; }
   let html="";
   if(opened && sl){
     let d=sl[storeVal]??sl.pantry;
@@ -2489,8 +2515,9 @@ function updateFreshInfo(){
   }
   const fs=freshStatus(tmp);
   const lead = recLine ? recLine+"<br>" : "";
-  if(fs){ box.className="freshbox "+(fs.level==="bad"?"bad":fs.level==="warn"?"warn":""); box.innerHTML=lead+(html?html+"<br>":"")+`⏱️ <b>${fs.label}</b> (use by ${fs.useBy})`; }
-  else if(html||recLine){ box.className="freshbox"; box.innerHTML=lead+html; }
+  const tail = basisLine ? `<br><span style="opacity:.7;font-size:12px">${basisLine}</span>` : "";
+  if(fs){ box.className="freshbox "+(fs.level==="bad"?"bad":fs.level==="warn"?"warn":""); box.innerHTML=lead+(html?html+"<br>":"")+`⏱️ <b>${fs.label}</b> (${fs.source==="bought"?"≈ estimated — no date entered":"use by "+fs.useBy})`+tail; }
+  else if(html||recLine||basisLine){ box.className="freshbox"; box.innerHTML=lead+html+tail; }
   else { box.className=""; box.innerHTML=""; }
 }
 
@@ -3097,6 +3124,30 @@ async function resolveProduct(code){
 }
 
 // Grocery-tab scan: check off if on the list -> restock if already in the pantry -> offer to add if unknown.
+// Reduce a product name to its brand-free core so different brands of the same item match.
+const _BRAND_PHRASES=/\b(no name|presidents choice|great value|kirkland signature|western family|our finest|life brand|signature select|members mark|good & gather|happy belly|del monte|club house|lee kum kee|old el paso|uncle bens|bens original|canada dry|maxwell house|coca ?cola|red bull|minute maid|tim hortons|robin hood)\b/g;
+const _BRAND_WORDS=new Set("pc noname kirkland compliments selection sensations equate marketside irresistibles personnelle exact heinz kraft nestle maggi knorr lipton campbells campbell hunts dole lawrys mccormick clic unico aylmer christie dare quaker kelloggs post hershey hersheys cadbury lindt mars nutella ferrero barilla catelli primo classico ragu hellmanns kikkoman franks tabasco frenchs mahatma dainty beatrice lactantia natrel philadelphia danone activia oikos liberte yoplait chapmans tropicana oasis gatorade powerade coke pepsi sprite fanta schweppes perrier evian dasani aquafina monster folgers nescafe starbucks mccafe twinings tetley bigelow presidents".split(" "));
+const _DESC_WORDS=new Set("the a of and with in no name brand value select choice fresh organic natural pure premium classic original fine ground whole light lite reduced low free extra large small medium family size pack jumbo mini new great real finest selection signature our percent lean boneless skinless".split(" "));
+function productCore(name){
+  let n=(" "+(name||"").toLowerCase()+" ").replace(/\u2019|\u0027/g,"").replace(/[^a-z0-9%&\s-]/g," ");
+  n=n.replace(_BRAND_PHRASES," ");
+  n=n.replace(/\b\d+(\.\d+)?\s?(g|kg|mg|ml|l|oz|lb|lbs|ct|pk|pcs|pack|x)\b/g," ").replace(/\b\d+(\.\d+)?%?\b/g," ");
+  const toks=n.split(/\s+/).filter(w=>w && w.length>1 && !_BRAND_WORDS.has(w) && !_DESC_WORDS.has(w));
+  return toks.slice().sort().join(" ");
+}
+// Restock a grocery line from the item you actually bought (a different brand): move it into the
+// pantry, updated to what you scanned. Never deletes — reversible via Undo.
+function restockGroceryLine(it, info, code){
+  const prev={location:it.location,checked:it.checked,name:it.name,barcode:it.barcode,photo:it.photo,percent:it.percent,exp:it.exp,opened:it.opened,store:it.store,category:it.category};
+  it.location="pantry"; it.checked=false; it.percent=100; it.exp=null; it.opened=null;
+  if(info.name) it.name=titleCase(info.name);
+  if(code) it.barcode=code;
+  if(info.category && CAT_ORDER.includes(info.category)) it.category=info.category;
+  if(info.photo && /^https?:/.test(info.photo)) it.photo=info.photo;
+  const _rec=bestStore(shelfLife(it.name,it.category),false); if(_rec) it.store=_rec;
+  save(); renderAll();
+  toastUndo(`✅ “${it.name}” restocked into your Pantry`,"good",()=>{ Object.assign(it,prev); save(); renderAll(); });
+}
 async function groceryScanBarcode(code){
   const gro=state.items.find(i=>i.barcode===code && i.location==="grocery");
   if(gro){ gro.checked=true; save(); renderAll(); toast(`🛒 “${gro.name}” checked off into the cart`,"good"); return; }
@@ -3109,6 +3160,19 @@ async function groceryScanBarcode(code){
     if(byName.location==="grocery"){ byName.barcode=byName.barcode||code; byName.checked=true; save(); renderAll(); toast(`🛒 “${byName.name}” checked off`,"good"); }
     else offerDuplicate(byName);
     return;
+  }
+  // Same product, different brand? Match on the brand-stripped core against the grocery list.
+  if(info.name){
+    const _core=productCore(info.name);
+    if(_core){
+      const cand=state.items.find(i=>i.location==="grocery" && productCore(i.name)===_core);
+      if(cand){
+        if(confirm(`Scanned: “${info.name}”.\n\nThis looks like “${cand.name}” on your grocery list — same item, different brand.\n\nMark it bought and stock it in your pantry?`)){
+          restockGroceryLine(cand, info, code);
+        }
+        return;
+      }
+    }
   }
   const label=info.name||("Product "+code);
   if(confirm(`“${label}” isn't on your grocery list or in your pantry.\n\nAdd it to your grocery list?`)){
