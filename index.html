@@ -174,6 +174,15 @@ body.viewonly .cathead .catadd{display:none}
 .note .ntext[contenteditable]{outline:none;min-height:22px;caret-color:var(--green)}
 .note .ntext[contenteditable]:focus{background:var(--bg);border-radius:8px;padding:6px;margin:-6px 0}
 .note .nmeta{font-size:11px;color:var(--muted);margin-top:8px}
+.rectabs{display:flex;gap:6px;overflow-x:auto;margin:0 0 10px;padding-bottom:2px}
+.rectabs .rtab{flex:0 0 auto;padding:6px 12px;border-radius:14px;background:var(--bg);border:1.5px solid var(--line);font-size:13px;font-weight:700;white-space:nowrap;color:var(--muted)}
+.rectabs .rtab.on{background:var(--green);color:#fff;border-color:var(--green)}
+.rectabs .rtab.add{font-weight:800}
+.rectabs .rtabx{margin-left:6px;opacity:.75}
+.recrow{padding:8px 0;border-bottom:1px solid var(--line);font-size:14.5px}
+.recrow.tappable{cursor:pointer}
+.recpct{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.recpct button{flex:1 0 auto;min-width:52px;padding:8px 0;border-radius:10px;border:1.5px solid var(--line);background:var(--card);font-weight:700;font-size:13px;color:var(--ink)}
 .note .ndel{position:absolute;top:10px;right:10px;color:var(--muted);font-size:16px;width:28px;height:28px}
 
 .empty{text-align:center;color:var(--muted);padding:60px 20px}
@@ -566,6 +575,7 @@ body.viewonly .vobadge{display:block}
     <div class="grab"></div>
     <h2>🧾 Check a recipe</h2>
     <div class="sub-hint" style="margin:-6px 0 10px">Paste a recipe or ingredient list. The app checks what you already have in your pantry, fridge and freezer.</div>
+    <div id="recipeTabs" class="rectabs"></div>
     <div class="field">
       <textarea id="recipeText" placeholder="e.g.  2 cups flour, 3 eggs, 1 onion, chicken breast, soy sauce" style="min-height:120px"></textarea>
     </div>
@@ -580,7 +590,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 55 · 2026-09-11</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 58 · 2026-09-11</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1973,6 +1983,14 @@ function freshStatus(item){
     }
   }
   if(item.exp){ if(!useBy || item.exp<useBy){ useBy=item.exp; source="exp"; } }
+  if(item.store==="freezer"){
+    const _slf=shelfLife(item.name,item.category);
+    if(_slf && _slf.freezer>0){
+      const _fz=new Date(itemAddedISO(item)); _fz.setDate(_fz.getDate()+_slf.freezer);
+      const _fzIso=_fz.toISOString().slice(0,10);
+      if(!useBy || _fzIso>useBy){ useBy=_fzIso; source="frozen"; }   // freezing only extends
+    }
+  }
   if(!useBy) return null;
   const left=daysBetween(todayISO(),useBy);
   let level="ok",label="";
@@ -4026,7 +4044,7 @@ $("#btnShowDanger").addEventListener("click",()=>{
 const recipeScrim=$("#recipeScrim");
 function parseRecipeLines(text){
   const UNIT=/^(cups?|tbsps?|tsps?|tablespoons?|teaspoons?|grams?|g|kg|kilograms?|ml|l|liters?|litres?|oz|ounces?|lb|lbs|pounds?|cloves?|cans?|packs?|packages?|bunch|bunches|slices?|pieces?|pinch|pinches|dash|dashes|handful|sprigs?|stalks?|sticks?|jars?|bottles?|bags?|heads?)$/i;
-  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|of|for|the|to|taste)$/i;
+  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|cooking|of|for|the|to|taste)$/i;
   const out=[];
   let t=(text||"").replace(/([a-zA-Z%\)\]])\s*(\d)/g,"$1\n$2").replace(/([a-zA-Z])\s*([\u00BC\u00BD\u00BE\u2150-\u215E])/g,"$1\n$2");
   t.split(/[\n,;]+|\bor\b/i).forEach(function(line){
@@ -4039,30 +4057,52 @@ function parseRecipeLines(text){
   });
   return Array.from(new Set(out));
 }
+const _RFORM=/^(powder|powdered|sauce|paste|oil|seasoning|flavou?red|flavou?r|hoisin|dressing|marinade|marinated|cube|cubes|bouillon|smoke|smoked|vinegar|syrup|jam|jelly|preserve|marmalade|extract|essence|juice|chip|chips|crisp|cracker|crackers|mix|icing|brown|confectioners|instant|pickled|concentrate|stock|broth|starch|bar|toast|drink|soda|cordial)$/i;
 function findPantryMatch(ing){
+  const iw=normName(ing).split(" ").filter(function(w){return w.length>1;});
+  if(!iw.length) return null;
+  const head=iw[iw.length-1];                                           // the main noun (e.g. WINE in "rice wine")
+  const ingForm=iw.some(function(w){return _RFORM.test(w);});
   const icore=(typeof productCore==="function")?productCore(ing):"";
-  const iwords=normName(ing).split(" ").filter(function(w){return w.length>2;});
-  let loose=null;
+  let best=null, bestExtra=1e9;
   for(const it of state.items){
     if(it.location!=="pantry") continue;
-    const nm=(it.name||"").toLowerCase();
-    if(icore && productCore(it.name)===icore) return it;
-    if(iwords.length && iwords.every(function(w){return nm.includes(w);})) return it;
-    if(!loose && ing.length>2 && nm.includes(ing)) loose=it;
+    const itw=normName(it.name).split(" ").filter(function(w){return w.length>1;});
+    if(itw.indexOf(head)<0) continue;                                    // item must contain the recipe head noun
+    const fwd=iw.every(function(w){return itw.indexOf(w)>=0;});          // recipe words all in the item
+    const rev=itw.every(function(w){return iw.indexOf(w)>=0;});          // item is a less-specific form of it
+    if(!fwd && !rev) continue;
+    if(!ingForm){                                                        // recipe wants the plain ingredient
+      if(itw.some(function(w){ return _RFORM.test(w) && iw.indexOf(w)<0; })) continue;  // item is a different form -> skip
+    }
+    if(icore && productCore(it.name)===icore) return it;                 // exact match wins outright
+    const extra=itw.filter(function(w){return iw.indexOf(w)<0;}).length; // otherwise prefer the CLOSEST item
+    if(extra<bestExtra){ bestExtra=extra; best=it; }
   }
-  return loose;
+  return best;
 }
 function renderRecipeResults(ings){
+  recipeLastIngs=ings;
   const have=[], need=[];
-  ings.forEach(function(ing){ const m=findPantryMatch(ing); if(m) have.push({ing:ing,m:m}); else need.push(ing); });
+  ings.forEach(function(ing){
+    if(/^(water|tap water|cold water|hot water|warm water|ice water|ice)$/.test(ing)){ have.push({ing:ing,m:{name:"always at home",store:"tap"}}); return; }
+    const m=findPantryMatch(ing); if(m) have.push({ing:ing,m:m}); else need.push(ing);
+  });
   let h="";
   if(have.length){
     h+=`<div style="font-weight:800;margin:6px 0 2px">✅ You have (${have.length})</div>`;
-    h+=have.map(function(x){ const loc=x.m.store==="fridge"?"❄️ Fridge":x.m.store==="freezer"?"🧊 Freezer":"🧺 Pantry"; return `<div style="padding:7px 0;border-bottom:1px solid var(--line)">✅ <b>${escapeHtml(x.ing)}</b> <span style="opacity:.65">— ${escapeHtml(x.m.name)} · ${loc}</span></div>`; }).join("");
+    h+=have.map(function(x){
+      const loc = x.m.store==="tap" ? "🚰 Always at home" : (x.m.store==="fridge"?"❄️ Fridge":x.m.store==="freezer"?"🧊 Freezer":"🧺 Pantry");
+      const id = x.m.id;
+      const left = (id && x.m.percent!=null) ? ` <span style="opacity:.6">· ${x.m.percent}% left</span>` : "";
+      const pct = id ? `<div class="recpct" hidden>`+[5,10,25,50,75,100].map(function(p){return `<button type="button" data-recuse="${id}" data-recpct="${p}">${p}%</button>`;}).join("")+`</div>` : "";
+      return `<div class="recrow${id?" tappable":""}"${id?` data-rectoggle="${id}"`:""}>✅ <b>${escapeHtml(x.ing)}</b> <span style="opacity:.65">— ${escapeHtml(x.m.name)} · ${loc}</span>${left}${pct}</div>`;
+    }).join("");
+    h+=`<div class="sub-hint" style="margin:6px 0 0">Tap an item you used to set how much is left.</div>`;
   }
   if(need.length){
     h+=`<div style="font-weight:800;margin:14px 0 2px">🛒 Not in your pantry (${need.length})</div>`;
-    h+=need.map(function(n){ return `<div style="padding:7px 0;border-bottom:1px solid var(--line)">❌ ${escapeHtml(n)}</div>`; }).join("");
+    h+=need.map(function(n){ return `<div class="recrow">❌ ${escapeHtml(n)}</div>`; }).join("");
     if(canEdit()) h+=`<button class="btn" id="btnRecipeAddMissing" style="margin-top:12px">🛒 Add ${need.length} missing to Grocery</button>`;
   }
   if(!have.length && !need.length) h=`<div class="sub-hint">No ingredients found — paste a list with one item per line (or separated by commas).</div>`;
@@ -4082,11 +4122,30 @@ function addMissingToGrocery(list){
   save(); renderAll();
   toast("🛒 Added "+added+" item(s) to your grocery list","good");
 }
-function openRecipeSheet(){ $("#recipeResults").innerHTML=""; recipeScrim.classList.add("on"); setTimeout(function(){ const t=$("#recipeText"); if(t) t.focus(); },150); }
+let recipeTabs=[], recipeActive=0, recipeLastIngs=[];
+function newRecipeTab(){ recipeTabs.push({name:"Recipe "+(recipeTabs.length+1),text:""}); recipeActive=recipeTabs.length-1; }
+function saveActiveTab(){ if(recipeTabs[recipeActive]) recipeTabs[recipeActive].text=$("#recipeText").value; }
+function renderRecipeTabs(){ const host=$("#recipeTabs"); if(!host) return;
+  host.innerHTML=recipeTabs.map(function(t,i){ return '<button type="button" class="rtab '+(i===recipeActive?"on":"")+'" data-rtab="'+i+'">'+escapeHtml(t.name)+(recipeTabs.length>1?' <span class="rtabx" data-rtabdel="'+i+'">✕</span>':"")+'</button>'; }).join("")+'<button type="button" class="rtab add" data-rtabadd="1">＋</button>';
+}
+function loadActiveTab(){ const t=recipeTabs[recipeActive]; $("#recipeText").value=(t&&t.text)||""; $("#recipeResults").innerHTML=""; recipeLastIngs=[]; renderRecipeTabs(); }
+function openRecipeSheet(){ if(!recipeTabs.length) newRecipeTab(); loadActiveTab(); recipeScrim.classList.add("on"); setTimeout(function(){ const t=$("#recipeText"); if(t) t.focus(); },150); }
+// Recipes are session-only: closing wipes every tab from memory. Nothing is written to storage or the cloud.
+function closeRecipeSheet(){ recipeScrim.classList.remove("on"); recipeTabs=[]; recipeActive=0; recipeLastIngs=[]; const t=$("#recipeText"); if(t) t.value=""; const r=$("#recipeResults"); if(r) r.innerHTML=""; }
+function recipeUse(id,pct){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; if(it.opened==null) it.opened=todayISO(); it.percent=pct; if(typeof it.byCount!=="undefined") it.byCount=false; save(); renderAll(); toast("Updated “"+it.name+"” — "+pct+"% left"+(pct<=10?" · running low":""),"good"); if(recipeLastIngs.length) renderRecipeResults(recipeLastIngs); }
 $("#btnRecipe") && $("#btnRecipe").addEventListener("click",openRecipeSheet);
-$("#btnRecipeClose") && $("#btnRecipeClose").addEventListener("click",function(){ recipeScrim.classList.remove("on"); });
-recipeScrim && recipeScrim.addEventListener("click",function(e){ if(e.target===recipeScrim) recipeScrim.classList.remove("on"); });
-$("#btnRecipeCheck") && $("#btnRecipeCheck").addEventListener("click",function(){ renderRecipeResults(parseRecipeLines($("#recipeText").value)); });
+$("#btnRecipeClose") && $("#btnRecipeClose").addEventListener("click",closeRecipeSheet);
+recipeScrim && recipeScrim.addEventListener("click",function(e){ if(e.target===recipeScrim) closeRecipeSheet(); });
+$("#btnRecipeCheck") && $("#btnRecipeCheck").addEventListener("click",function(){ saveActiveTab(); renderRecipeResults(parseRecipeLines($("#recipeText").value)); });
+$("#recipeTabs") && $("#recipeTabs").addEventListener("click",function(e){
+  const del=e.target.closest("[data-rtabdel]"); if(del){ e.stopPropagation(); recipeTabs.splice(+del.dataset.rtabdel,1); if(!recipeTabs.length) newRecipeTab(); if(recipeActive>=recipeTabs.length) recipeActive=recipeTabs.length-1; loadActiveTab(); return; }
+  const add=e.target.closest("[data-rtabadd]"); if(add){ saveActiveTab(); newRecipeTab(); loadActiveTab(); setTimeout(function(){ const t=$("#recipeText"); if(t) t.focus(); },50); return; }
+  const tab=e.target.closest("[data-rtab]"); if(tab){ saveActiveTab(); recipeActive=+tab.dataset.rtab; loadActiveTab(); return; }
+});
+$("#recipeResults") && $("#recipeResults").addEventListener("click",function(e){
+  const use=e.target.closest("[data-recuse]"); if(use){ recipeUse(use.dataset.recuse,+use.dataset.recpct); return; }
+  const row=e.target.closest("[data-rectoggle]"); if(row){ const pc=row.querySelector(".recpct"); if(pc) pc.hidden=!pc.hidden; return; }
+});
 
 load();
 switchTab("pantry");
