@@ -580,7 +580,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 53 · 2026-09-10</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 55 · 2026-09-11</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1448,6 +1448,7 @@ const FRESH=[
   [["better than bouillon","bouillon","stock cube","beef cube","pork cube","chicken cube","vegetable cube","maggi cube","knorr cube","bouillon cube","broth cube","chicken base","beef base","vegetable base","broth base","soup base","stock paste","bouillon paste"],{fridge:540,freezer:365,pantry:365}],
   // More brand/keyword mis-match guards (specifics BEFORE the broad produce/meat matches):
   [["avocado oil"],{fridge:0,freezer:0,pantry:365}],
+  [["extra virgin olive oil","olive oil","huile"],{fridge:0,freezer:0,pantry:540}],
   [["apple cider vinegar","cider vinegar","balsamic vinegar","rice vinegar","wine vinegar","white vinegar","malt vinegar","distilled vinegar"],{fridge:730,freezer:0,pantry:730}],
   [["garlic powder","onion powder","garlic salt","onion salt","garlic granule","onion granule"],{fridge:0,freezer:0,pantry:730}],
   [["caper","capers","brined olive","green olive","black olive","kalamata"],{fridge:365,freezer:0,pantry:14}],
@@ -1705,6 +1706,8 @@ const CAT_SHELF={
 const _PRODUCE_RE=/(strawberr|blueberr|raspberr|blackberr|cranberr|banana|apple|orange|pear|peach|nectarine|plum|apricot|mango|avocado|kiwi|lemon|lime|grapefruit|coconut|pomegranate|papaya|pineapple|melon|watermelon|cantaloupe|honeydew|grape|cherr|guava|lychee|persimmon|tangerine|clementine|mandarin|plantain|jackfruit|onion|garlic|ginger|carrot|broccoli|cauliflower|spinach|lettuce|cabbage|cucumber|celery|mushroom|zucchini|eggplant|okra|sprout|tomato|potato|kale|beet|radish|turnip|leek|scallion|shallot|kangkong|malunggay|sitaw|bok choy|pechay|kalabasa)/;
 const _NOT_FRESH=/juice|lemonade|\bade\b|drink|soda|cola|nectar|cordial|squash|punch|smoothie|shake|flavou?r|bottled|\bbottle\b|canned|\bcan\b|\bjar\b|syrup|\bjam\b|jelly|preserve|marmalade|sauce|ketchup|paste|puree|concentrate|powder|dried|dehydrated|chip|crisp|candy|gummy|yogurt|yoghurt|cream|popsicle|sorbet|jello|gelatin|extract|essence|\btea\b|coffee|latte|frappe|cider|wine|beer|liqueur|vodka|spirit|milk|vinegar|pickle|frozen/;
 const _PACKAGED_CAT=/Beverage|Condiment|Sauce|Oil|Canned|Soup|Baking|Snack|Season|Spice|Dried|Supplement|Pasta|Grain|Noodle|Dairy|Frozen/i;
+const _PERISH_EXTRA=/(bread|bun|bagel|baguette|brioche|roll|pita|tortilla|naan|muffin|pastry|scone|donut|doughnut|butter|cheese|milk|cream|yogurt|yoghurt|egg|eggs|chicken|beef|pork|turkey|lamb|veal|fish|salmon|tilapia|shrimp|prawn|bacon|sausage|ham|meat|tofu|tempeh|steak|mince|deli)/;
+const _DRY_CAT=/Snack|Baking|Grain|Pasta|Noodle|Beverage|Supplement|Spice|Season|Dried/i;
 function prettyKw(k){ k=(k||"").replace(/berr$/,"berry"); return k.charAt(0).toUpperCase()+k.slice(1); }
 function shelfLife(name,cat){
   const n=(name||"").toLowerCase();
@@ -1713,7 +1716,8 @@ function shelfLife(name,cat){
   for(const [kws,d] of FRESH){
     for(const kw of kws){
       if(!n.includes(kw)) continue;
-      if(packaged && _PRODUCE_RE.test(kw) && !_NOT_FRESH.test(kw)) continue;   // packaged item just mentioning a fruit/veg
+      if(packaged && kw.indexOf(" ")===-1 && _PRODUCE_RE.test(kw) && !_NOT_FRESH.test(kw)) continue;   // packaged item merely mentioning a bare fruit/veg
+      if(_DRY_CAT.test(cat) && kw.indexOf(" ")===-1 && (_PRODUCE_RE.test(kw)||_PERISH_EXTRA.test(kw))) continue;   // dry/shelf-stable product just naming a perishable
       if(kw.length>bestLen){ bestLen=kw.length; best={d, kw}; }                // most-specific keyword wins
     }
   }
@@ -4022,11 +4026,12 @@ $("#btnShowDanger").addEventListener("click",()=>{
 const recipeScrim=$("#recipeScrim");
 function parseRecipeLines(text){
   const UNIT=/^(cups?|tbsps?|tsps?|tablespoons?|teaspoons?|grams?|g|kg|kilograms?|ml|l|liters?|litres?|oz|ounces?|lb|lbs|pounds?|cloves?|cans?|packs?|packages?|bunch|bunches|slices?|pieces?|pinch|pinches|dash|dashes|handful|sprigs?|stalks?|sticks?|jars?|bottles?|bags?|heads?)$/i;
-  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|of|for|the)$/i;
+  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|of|for|the|to|taste)$/i;
   const out=[];
-  (text||"").split(/[\n,;]+/).forEach(function(line){
+  let t=(text||"").replace(/([a-zA-Z%\)\]])\s*(\d)/g,"$1\n$2").replace(/([a-zA-Z])\s*([\u00BC\u00BD\u00BE\u2150-\u215E])/g,"$1\n$2");
+  t.split(/[\n,;]+|\bor\b/i).forEach(function(line){
     line=line.replace(/\(.*?\)/g," ").replace(/[^a-zA-Z\u00C0-\u017F\s\/-]/g," ");
-    let toks=line.split(/\s+/).filter(Boolean);
+    let toks=line.split(/\s+/).filter(function(w){ return w && /[a-zA-Z]/.test(w); });
     while(toks.length && (UNIT.test(toks[0]) || DESC.test(toks[0]) || /^(a|an|one|two|three|four|five|six|some|few)$/i.test(toks[0]))) toks.shift();
     toks=toks.filter(function(w){ return !DESC.test(w); });
     const name=toks.join(" ").trim();
