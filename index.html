@@ -396,7 +396,7 @@ body.viewonly .vobadge{display:block}
   <div class="hrow">
     <div class="htitle"><span class="emoji" id="hEmoji"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px"><line x1="4" y1="10" x2="20" y2="10"/><line x1="4" y1="17" x2="20" y2="17"/><rect x="6" y="6" width="3" height="4" rx="0.6" fill="#fff" stroke="none"/><rect x="10.5" y="4.5" width="2.4" height="5.5" rx="1" fill="#fff" stroke="none" opacity=".85"/><rect x="14.5" y="6.5" width="3.5" height="3.5" rx="0.6" fill="#fff" stroke="none" opacity=".9"/><rect x="6" y="13.5" width="3.5" height="3.5" rx="0.6" fill="#fff" stroke="none" opacity=".85"/><rect x="11" y="12" width="2.4" height="5" rx="0.6" fill="#fff" stroke="none"/><circle cx="16.3" cy="14.8" r="2" fill="#fff" stroke="none" opacity=".85"/></svg></span><span id="hTitle">Pantry</span></div>
     <button class="hbtn" id="btnClearChecked" title="Clear checked" style="display:none">🧹</button>
-    <button class="hbtn" id="btnRecipe" title="Check a recipe">🧾</button>
+    <button class="hbtn" id="btnRecipe" title="Recipes">📖</button>
     <button class="hbtn" id="btnSort" title="Sort">⇅</button>
     <button class="hbtn" id="btnSettings" title="Settings">⚙️</button>
   </div>
@@ -573,11 +573,11 @@ body.viewonly .vobadge{display:block}
 <div class="scrim" id="recipeScrim">
   <div class="sheet">
     <div class="grab"></div>
-    <h2>🧾 Check a recipe</h2>
+    <h2>📖 Recipes</h2>
     <div class="sub-hint" style="margin:-6px 0 10px">Paste a recipe or ingredient list. The app checks what you already have in your pantry, fridge and freezer.</div>
     <div id="recipeTabs" class="rectabs"></div>
     <div class="field">
-      <textarea id="recipeText" placeholder="e.g.  2 cups flour, 3 eggs, 1 onion, chicken breast, soy sauce" style="min-height:120px"></textarea>
+      <textarea id="recipeText" placeholder="Paste or write your recipe here…&#10;&#10;e.g.&#10;2 cups flour&#10;3 eggs&#10;1 onion&#10;chicken breast&#10;soy sauce" style="min-height:230px"></textarea>
     </div>
     <button class="btn" id="btnRecipeCheck">Check my pantry</button>
     <div id="recipeResults" style="margin-top:12px"></div>
@@ -590,7 +590,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 58 · 2026-09-11</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 59 · 2026-09-11</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -4057,7 +4057,7 @@ function parseRecipeLines(text){
   });
   return Array.from(new Set(out));
 }
-const _RFORM=/^(powder|powdered|sauce|paste|oil|seasoning|flavou?red|flavou?r|hoisin|dressing|marinade|marinated|cube|cubes|bouillon|smoke|smoked|vinegar|syrup|jam|jelly|preserve|marmalade|extract|essence|juice|chip|chips|crisp|cracker|crackers|mix|icing|brown|confectioners|instant|pickled|concentrate|stock|broth|starch|bar|toast|drink|soda|cordial)$/i;
+const _RFORM=/^(powder|powdered|sauce|paste|oil|seasoning|flavou?red|flavou?r|hoisin|dressing|marinade|marinated|cube|cubes|bouillon|smoke|smoked|vinegar|syrup|jam|jelly|preserve|marmalade|extract|essence|juice|chip|chips|crisp|mix|icing|brown|confectioners|instant|pickled|concentrate|stock|broth|starch|drink|soda|cordial)$/i;
 function findPantryMatch(ing){
   const iw=normName(ing).split(" ").filter(function(w){return w.length>1;});
   if(!iw.length) return null;
@@ -4123,22 +4123,27 @@ function addMissingToGrocery(list){
   toast("🛒 Added "+added+" item(s) to your grocery list","good");
 }
 let recipeTabs=[], recipeActive=0, recipeLastIngs=[];
-function newRecipeTab(){ recipeTabs.push({name:"Recipe "+(recipeTabs.length+1),text:""}); recipeActive=recipeTabs.length-1; }
-function saveActiveTab(){ if(recipeTabs[recipeActive]) recipeTabs[recipeActive].text=$("#recipeText").value; }
+const RECIPE_KEY="pantry_recipes_v1";   // saved on THIS DEVICE only — never synced to the cloud
+function persistRecipes(){ try{ localStorage.setItem(RECIPE_KEY, JSON.stringify(recipeTabs)); }catch(e){} }
+function loadRecipes(){ try{ const a=JSON.parse(localStorage.getItem(RECIPE_KEY)||"[]"); recipeTabs=Array.isArray(a)?a:[]; }catch(e){ recipeTabs=[]; } }
+function tabTitle(text,i){ const f=((text||"").split(/[\n,]/)[0]||"").trim(); return f ? (f.length>15?f.slice(0,15)+"…":f) : ("Recipe "+(i+1)); }
+function newRecipeTab(){ recipeTabs.push({text:""}); recipeActive=recipeTabs.length-1; persistRecipes(); }
+function saveActiveTab(){ if(recipeTabs[recipeActive]){ recipeTabs[recipeActive].text=$("#recipeText").value; persistRecipes(); } }
 function renderRecipeTabs(){ const host=$("#recipeTabs"); if(!host) return;
-  host.innerHTML=recipeTabs.map(function(t,i){ return '<button type="button" class="rtab '+(i===recipeActive?"on":"")+'" data-rtab="'+i+'">'+escapeHtml(t.name)+(recipeTabs.length>1?' <span class="rtabx" data-rtabdel="'+i+'">✕</span>':"")+'</button>'; }).join("")+'<button type="button" class="rtab add" data-rtabadd="1">＋</button>';
+  host.innerHTML=recipeTabs.map(function(t,i){ return '<button type="button" class="rtab '+(i===recipeActive?"on":"")+'" data-rtab="'+i+'">'+escapeHtml(tabTitle(t.text,i))+' <span class="rtabx" data-rtabdel="'+i+'">✕</span>'+'</button>'; }).join("")+'<button type="button" class="rtab add" data-rtabadd="1">＋</button>';
 }
 function loadActiveTab(){ const t=recipeTabs[recipeActive]; $("#recipeText").value=(t&&t.text)||""; $("#recipeResults").innerHTML=""; recipeLastIngs=[]; renderRecipeTabs(); }
-function openRecipeSheet(){ if(!recipeTabs.length) newRecipeTab(); loadActiveTab(); recipeScrim.classList.add("on"); setTimeout(function(){ const t=$("#recipeText"); if(t) t.focus(); },150); }
-// Recipes are session-only: closing wipes every tab from memory. Nothing is written to storage or the cloud.
-function closeRecipeSheet(){ recipeScrim.classList.remove("on"); recipeTabs=[]; recipeActive=0; recipeLastIngs=[]; const t=$("#recipeText"); if(t) t.value=""; const r=$("#recipeResults"); if(r) r.innerHTML=""; }
+function openRecipeSheet(){ if(!recipeTabs.length) loadRecipes(); if(!recipeTabs.length) newRecipeTab(); if(recipeActive>=recipeTabs.length) recipeActive=0; loadActiveTab(); recipeScrim.classList.add("on"); setTimeout(function(){ const t=$("#recipeText"); if(t) t.focus(); },150); }
+// Recipe tabs persist on THIS DEVICE (localStorage) so they are still here when you reopen — a tab is gone only when you tap its ✕.
+function closeRecipeSheet(){ saveActiveTab(); recipeScrim.classList.remove("on"); }
 function recipeUse(id,pct){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; if(it.opened==null) it.opened=todayISO(); it.percent=pct; if(typeof it.byCount!=="undefined") it.byCount=false; save(); renderAll(); toast("Updated “"+it.name+"” — "+pct+"% left"+(pct<=10?" · running low":""),"good"); if(recipeLastIngs.length) renderRecipeResults(recipeLastIngs); }
 $("#btnRecipe") && $("#btnRecipe").addEventListener("click",openRecipeSheet);
 $("#btnRecipeClose") && $("#btnRecipeClose").addEventListener("click",closeRecipeSheet);
 recipeScrim && recipeScrim.addEventListener("click",function(e){ if(e.target===recipeScrim) closeRecipeSheet(); });
 $("#btnRecipeCheck") && $("#btnRecipeCheck").addEventListener("click",function(){ saveActiveTab(); renderRecipeResults(parseRecipeLines($("#recipeText").value)); });
+$("#recipeText") && $("#recipeText").addEventListener("input",saveActiveTab);
 $("#recipeTabs") && $("#recipeTabs").addEventListener("click",function(e){
-  const del=e.target.closest("[data-rtabdel]"); if(del){ e.stopPropagation(); recipeTabs.splice(+del.dataset.rtabdel,1); if(!recipeTabs.length) newRecipeTab(); if(recipeActive>=recipeTabs.length) recipeActive=recipeTabs.length-1; loadActiveTab(); return; }
+  const del=e.target.closest("[data-rtabdel]"); if(del){ e.stopPropagation(); recipeTabs.splice(+del.dataset.rtabdel,1); if(!recipeTabs.length) newRecipeTab(); if(recipeActive>=recipeTabs.length) recipeActive=recipeTabs.length-1; persistRecipes(); loadActiveTab(); return; }
   const add=e.target.closest("[data-rtabadd]"); if(add){ saveActiveTab(); newRecipeTab(); loadActiveTab(); setTimeout(function(){ const t=$("#recipeText"); if(t) t.focus(); },50); return; }
   const tab=e.target.closest("[data-rtab]"); if(tab){ saveActiveTab(); recipeActive=+tab.dataset.rtab; loadActiveTab(); return; }
 });
