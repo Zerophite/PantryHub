@@ -590,7 +590,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 59 · 2026-09-11</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 61 · 2026-09-11</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -3803,6 +3803,7 @@ function enableSwipeClose(sheet, closeFn){
 enableSwipeClose($("#itemSheet"), closeItemSheet);
 enableSwipeClose($("#noteScrim .sheet"), ()=>noteScrim.classList.remove("on"));
 enableSwipeClose($("#settingsSheet"), ()=>settingsScrim.classList.remove("on"));
+enableSwipeClose($("#recipeScrim .sheet"), closeRecipeSheet);
 
 /* ============================================================
    SETTINGS
@@ -4044,39 +4045,41 @@ $("#btnShowDanger").addEventListener("click",()=>{
 const recipeScrim=$("#recipeScrim");
 function parseRecipeLines(text){
   const UNIT=/^(cups?|tbsps?|tsps?|tablespoons?|teaspoons?|grams?|g|kg|kilograms?|ml|l|liters?|litres?|oz|ounces?|lb|lbs|pounds?|cloves?|cans?|packs?|packages?|bunch|bunches|slices?|pieces?|pinch|pinches|dash|dashes|handful|sprigs?|stalks?|sticks?|jars?|bottles?|bags?|heads?)$/i;
-  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|cooking|of|for|the|to|taste)$/i;
+  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|slice|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|cooking|leaves|leaf|sprig|sprigs|stalk|stalks|zest|zested|peel|peeled|seeded|cored|trimmed|halved|quartered|cut|into|thin|thick|strips|strip|pieces|piece|chunk|chunks|cube|cubes|sized|etc|eg|ie|of|for|the|to|taste)$/i;
   const out=[];
-  let t=(text||"").replace(/([a-zA-Z%\)\]])\s*(\d)/g,"$1\n$2").replace(/([a-zA-Z])\s*([\u00BC\u00BD\u00BE\u2150-\u215E])/g,"$1\n$2");
-  t.split(/[\n,;]+|\bor\b/i).forEach(function(line){
+  let t=(text||"").replace(/\([^)]*\)/g," ").replace(/([a-zA-Z%\)\]])\s*(\d)/g,"$1\n$2").replace(/([a-zA-Z])\s*([\u00BC\u00BD\u00BE\u2150-\u215E])/g,"$1\n$2");
+  t.split(/[\n,;]+|\bor\b|\band\b|&/i).forEach(function(line){
     line=line.replace(/\(.*?\)/g," ").replace(/[^a-zA-Z\u00C0-\u017F\s\/-]/g," ");
     let toks=line.split(/\s+/).filter(function(w){ return w && /[a-zA-Z]/.test(w); });
     while(toks.length && (UNIT.test(toks[0]) || DESC.test(toks[0]) || /^(a|an|one|two|three|four|five|six|some|few)$/i.test(toks[0]))) toks.shift();
-    toks=toks.filter(function(w){ return !DESC.test(w); });
+    toks=toks.filter(function(w){ return !DESC.test(w) && !UNIT.test(w); });
     const name=toks.join(" ").trim();
     if(name && name.length>1) out.push(name.toLowerCase());
   });
   return Array.from(new Set(out));
 }
 const _RFORM=/^(powder|powdered|sauce|paste|oil|seasoning|flavou?red|flavou?r|hoisin|dressing|marinade|marinated|cube|cubes|bouillon|smoke|smoked|vinegar|syrup|jam|jelly|preserve|marmalade|extract|essence|juice|chip|chips|crisp|mix|icing|brown|confectioners|instant|pickled|concentrate|stock|broth|starch|drink|soda|cordial)$/i;
+const _QUAL=/^(neutral|vegetable|veg|cooking|any|frying|all|plain|table|fine|coarse|regular|pure|light|dark|raw|whole|ground|granulated|powdered|white|fresh|dried|prepared|classic|original|unsalted|salted|low|reduced|extra|virgin|medium|large|small|hot|mild|sweet)$/i;
+const _GENERIC_HEAD=/^(oil|sauce|vinegar|sugar|flour|milk|cheese|pepper|salt|powder|paste|stock|broth|wine|cream|butter|rice|juice|syrup|seasoning|spice|herb|water|starch)$/i;
+function _sing(w){ return (w.length>3 && /s$/.test(w) && !/ss$/.test(w)) ? w.slice(0,-1) : w; }   // rough singularize (lemons->lemon)
+function _words(str){ return normName(str).split(" ").map(_sing).filter(function(w){return w.length>1;}); }
+function _ingSyn(iw){ if(iw.length===1 && iw[0]==="pepper") return ["black","pepper"]; return iw; }   // bare "pepper" = black pepper
 function findPantryMatch(ing){
-  const iw=normName(ing).split(" ").filter(function(w){return w.length>1;});
+  let iw=_ingSyn(_words(ing));
   if(!iw.length) return null;
-  const head=iw[iw.length-1];                                           // the main noun (e.g. WINE in "rice wine")
+  const head=iw[iw.length-1];                                           // main noun
+  const mods=iw.slice(0,-1).filter(function(w){ return !_QUAL.test(w); }); // meaningful modifiers (drop generic qualifiers like "neutral")
+  const genericHead=_GENERIC_HEAD.test(head);
   const ingForm=iw.some(function(w){return _RFORM.test(w);});
-  const icore=(typeof productCore==="function")?productCore(ing):"";
   let best=null, bestExtra=1e9;
   for(const it of state.items){
     if(it.location!=="pantry") continue;
-    const itw=normName(it.name).split(" ").filter(function(w){return w.length>1;});
-    if(itw.indexOf(head)<0) continue;                                    // item must contain the recipe head noun
-    const fwd=iw.every(function(w){return itw.indexOf(w)>=0;});          // recipe words all in the item
-    const rev=itw.every(function(w){return iw.indexOf(w)>=0;});          // item is a less-specific form of it
-    if(!fwd && !rev) continue;
-    if(!ingForm){                                                        // recipe wants the plain ingredient
-      if(itw.some(function(w){ return _RFORM.test(w) && iw.indexOf(w)<0; })) continue;  // item is a different form -> skip
-    }
-    if(icore && productCore(it.name)===icore) return it;                 // exact match wins outright
-    const extra=itw.filter(function(w){return iw.indexOf(w)<0;}).length; // otherwise prefer the CLOSEST item
+    const itw=_words(it.name);
+    if(itw.indexOf(head)<0) continue;                                    // item must contain the head noun
+    if(!ingForm && itw.some(function(w){ return _RFORM.test(w) && iw.indexOf(w)<0; })) continue;      // different form -> skip
+    if(genericHead && mods.length && !mods.every(function(w){ return itw.indexOf(w)>=0; })) continue; // generic head needs its modifier (SESAME oil != avocado oil)
+    if(head==="oil" && !mods.length && /sesame|olive|chili|chilli|truffle|walnut|almond|coconut|peanut|hazelnut/.test((it.name||"").toLowerCase())) continue; // plain "oil" != a flavoured oil
+    const extra=itw.filter(function(w){ return iw.indexOf(w)<0; }).length;  // prefer the closest item
     if(extra<bestExtra){ bestExtra=extra; best=it; }
   }
   return best;
@@ -4092,6 +4095,7 @@ function renderRecipeResults(ings){
   if(have.length){
     h+=`<div style="font-weight:800;margin:6px 0 2px">✅ You have (${have.length})</div>`;
     h+=have.map(function(x){
+      if(x.m.store==="tap") return `<div class="recrow">✅ <b>${escapeHtml(x.ing)}</b> <span style="opacity:.5">· 🚰 always available</span></div>`;
       const loc = x.m.store==="tap" ? "🚰 Always at home" : (x.m.store==="fridge"?"❄️ Fridge":x.m.store==="freezer"?"🧊 Freezer":"🧺 Pantry");
       const id = x.m.id;
       const left = (id && x.m.percent!=null) ? ` <span style="opacity:.6">· ${x.m.percent}% left</span>` : "";
