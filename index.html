@@ -387,6 +387,7 @@ body.viewonly .vobadge{display:block}
   <div class="hrow">
     <div class="htitle"><span class="emoji" id="hEmoji"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align:-3px"><line x1="4" y1="10" x2="20" y2="10"/><line x1="4" y1="17" x2="20" y2="17"/><rect x="6" y="6" width="3" height="4" rx="0.6" fill="#fff" stroke="none"/><rect x="10.5" y="4.5" width="2.4" height="5.5" rx="1" fill="#fff" stroke="none" opacity=".85"/><rect x="14.5" y="6.5" width="3.5" height="3.5" rx="0.6" fill="#fff" stroke="none" opacity=".9"/><rect x="6" y="13.5" width="3.5" height="3.5" rx="0.6" fill="#fff" stroke="none" opacity=".85"/><rect x="11" y="12" width="2.4" height="5" rx="0.6" fill="#fff" stroke="none"/><circle cx="16.3" cy="14.8" r="2" fill="#fff" stroke="none" opacity=".85"/></svg></span><span id="hTitle">Pantry</span></div>
     <button class="hbtn" id="btnClearChecked" title="Clear checked" style="display:none">🧹</button>
+    <button class="hbtn" id="btnRecipe" title="Check a recipe">🧾</button>
     <button class="hbtn" id="btnSort" title="Sort">⇅</button>
     <button class="hbtn" id="btnSettings" title="Settings">⚙️</button>
   </div>
@@ -560,12 +561,26 @@ body.viewonly .vobadge{display:block}
   </div>
 </div>
 
+<div class="scrim" id="recipeScrim">
+  <div class="sheet">
+    <div class="grab"></div>
+    <h2>🧾 Check a recipe</h2>
+    <div class="sub-hint" style="margin:-6px 0 10px">Paste a recipe or ingredient list. The app checks what you already have in your pantry, fridge and freezer.</div>
+    <div class="field">
+      <textarea id="recipeText" placeholder="e.g.  2 cups flour, 3 eggs, 1 onion, chicken breast, soy sauce" style="min-height:120px"></textarea>
+    </div>
+    <button class="btn" id="btnRecipeCheck">Check my pantry</button>
+    <div id="recipeResults" style="margin-top:12px"></div>
+    <button class="btn ghost" id="btnRecipeClose">Close</button>
+  </div>
+</div>
+
 <!-- ============ Settings sheet ============ -->
 <div class="scrim" id="settingsScrim">
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 51 · 2026-09-10</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 53 · 2026-09-10</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1806,9 +1821,7 @@ function hydratePhotos(){ try{ document.querySelectorAll("img.lazyphoto").forEac
   const tryBc=()=>{ if(bc && window.Products){ window.Products.get(bc).then(sp=>{ if(sp && ok(sp.photo)) return useShared(sp.photo); tryName(); }).catch(tryName); } else tryName(); };
   tryBc();
 }); }catch(e){} }
-function refreshSharedPhotos(){ try{ if(window.resetPhotoCache) window.resetPhotoCache(); document.querySelectorAll("img.lazyphoto").forEach(function(img){ try{ delete img.dataset.done; }catch(e){} }); hydratePhotos(); }catch(e){} }
-let _lastPhotoRefresh=Date.now();
-document.addEventListener("visibilitychange",function(){ if(document.visibilityState==="visible"){ var now=Date.now(); if(now-_lastPhotoRefresh>12000){ _lastPhotoRefresh=now; refreshSharedPhotos(); } } });
+// (Foreground photo-refresh removed — it blanked thumbnails on resume. Images refresh on full reopen.)
 // One-time: move any base64 photos (from state, the old localStorage store, and the products cache) into IndexedDB.
 function migratePhotos(){
   let ch=false;
@@ -1933,16 +1946,11 @@ function itemAddedISO(it){
 // Fresh produce (fruits AND vegetables) in the produce category ages from the day it's added — but
 // packaged/preserved forms (Coconut MILK, dried, canned, frozen, sauces…) do NOT.
 function agesFromPurchase(it){
-  const cat=(it.category||""); const n=(it.name||"").toLowerCase();
-  // Packaged / preserved / long-life forms never age from the purchase date.
-  if(/(dried|dehydrated|canned|jarred|\bcan\b|powder|granul|flake|paste|sauce|syrup|jam|jelly|pickled|frozen|uht|long.?life|evaporated|condensed|instant|cured|jerky|smoked|sterili|shelf.?stable)/.test(n)) return false;
-  if(cat==="Fruits & Vegetables" || cat==="Fruit/Veggies"){
-    if(/(juice|milk|cream|chip|crisp|vinegar|extract|seasoning|starch|salt|puree|concentrate|bottle)/.test(n)) return false;
-    return true;
-  }
-  // Other genuinely-perishable fresh foods that usually have no (or only a short) printed date.
-  if(/(bread|\bbun\b|buns|bagel|baguette|croissant|brioche|\broll\b|rolls|\bpita\b|tortilla|naan|flatbread|muffin|pastry|scone|donut|doughnut|chicken|\bbeef\b|\bpork\b|turkey|\blamb\b|\bveal\b|\bfish\b|salmon|tilapia|\bcod\b|halibut|trout|bangus|shrimp|prawn|\bcrab\b|lobster|scallop|mussel|clam|oyster|squid|\bmeat\b|steak|\bmince\b|sausage|tofu|tempeh|\begg\b|eggs|\bmilk\b|yogurt|yoghurt|\bcheese\b|deli)/.test(n)) return true;
-  return false;
+  const cat=(it.category||"");
+  if(cat!=="Fruits & Vegetables" && cat!=="Fruit/Veggies") return false;   // fresh produce only
+  const n=(it.name||"").toLowerCase();
+  if(/(dried|dehydrated|canned|jarred|\bcan\b|powder|granul|flake|paste|sauce|syrup|jam|jelly|pickled|frozen|juice|milk|cream|chip|crisp|vinegar|extract|seasoning|starch|salt|puree|concentrate|bottle)/.test(n)) return false;
+  return true;
 }
 // Only real fresh FRUIT gets a ripeness control (not vegetables, not packaged goods).
 const _FRUIT_RE=/\b(banana|apple|orange|pear|peach|nectarine|plum|apricot|mango|avocado|kiwi|lemon|lime|grapefruit|coconut|pomegranate|papaya|pineapple|melon|watermelon|cantaloupe|honeydew|grape|cherry|cherries|strawberr|blueberr|raspberr|blackberr|fig|guava|lychee|persimmon|dragonfruit|starfruit|tangerine|clementine|mandarin|plantain|jackfruit|durian|rambutan|longan)\b/;
@@ -3389,7 +3397,7 @@ async function geminiReadDate(dataUrl){
   const mime=dataUrl.slice(5, dataUrl.indexOf(";"));
   // Calls YOUR private Cloudflare Worker (window.GEMINI_PROXY) — the key lives there, not here.
   const r=await fetchT(window.GEMINI_PROXY,{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({b64:b64,mime:mime,today:todayISO()})},8000);
+    body:JSON.stringify({b64:b64,mime:mime,today:todayISO()})},20000);
   const raw=await r.text();
   let j={}; try{ j=JSON.parse(raw); }catch(e){}
   console.log("[geminiReadDate] status",r.status,"body",raw.slice(0,300));
@@ -4010,6 +4018,71 @@ $("#btnShowDanger").addEventListener("click",()=>{
 /* ============================================================
    INIT
    ============================================================ */
+/* ===== Recipe checker: paste a recipe -> see what you already have ===== */
+const recipeScrim=$("#recipeScrim");
+function parseRecipeLines(text){
+  const UNIT=/^(cups?|tbsps?|tsps?|tablespoons?|teaspoons?|grams?|g|kg|kilograms?|ml|l|liters?|litres?|oz|ounces?|lb|lbs|pounds?|cloves?|cans?|packs?|packages?|bunch|bunches|slices?|pieces?|pinch|pinches|dash|dashes|handful|sprigs?|stalks?|sticks?|jars?|bottles?|bags?|heads?)$/i;
+  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|of|for|the)$/i;
+  const out=[];
+  (text||"").split(/[\n,;]+/).forEach(function(line){
+    line=line.replace(/\(.*?\)/g," ").replace(/[^a-zA-Z\u00C0-\u017F\s\/-]/g," ");
+    let toks=line.split(/\s+/).filter(Boolean);
+    while(toks.length && (UNIT.test(toks[0]) || DESC.test(toks[0]) || /^(a|an|one|two|three|four|five|six|some|few)$/i.test(toks[0]))) toks.shift();
+    toks=toks.filter(function(w){ return !DESC.test(w); });
+    const name=toks.join(" ").trim();
+    if(name && name.length>1) out.push(name.toLowerCase());
+  });
+  return Array.from(new Set(out));
+}
+function findPantryMatch(ing){
+  const icore=(typeof productCore==="function")?productCore(ing):"";
+  const iwords=normName(ing).split(" ").filter(function(w){return w.length>2;});
+  let loose=null;
+  for(const it of state.items){
+    if(it.location!=="pantry") continue;
+    const nm=(it.name||"").toLowerCase();
+    if(icore && productCore(it.name)===icore) return it;
+    if(iwords.length && iwords.every(function(w){return nm.includes(w);})) return it;
+    if(!loose && ing.length>2 && nm.includes(ing)) loose=it;
+  }
+  return loose;
+}
+function renderRecipeResults(ings){
+  const have=[], need=[];
+  ings.forEach(function(ing){ const m=findPantryMatch(ing); if(m) have.push({ing:ing,m:m}); else need.push(ing); });
+  let h="";
+  if(have.length){
+    h+=`<div style="font-weight:800;margin:6px 0 2px">✅ You have (${have.length})</div>`;
+    h+=have.map(function(x){ const loc=x.m.store==="fridge"?"❄️ Fridge":x.m.store==="freezer"?"🧊 Freezer":"🧺 Pantry"; return `<div style="padding:7px 0;border-bottom:1px solid var(--line)">✅ <b>${escapeHtml(x.ing)}</b> <span style="opacity:.65">— ${escapeHtml(x.m.name)} · ${loc}</span></div>`; }).join("");
+  }
+  if(need.length){
+    h+=`<div style="font-weight:800;margin:14px 0 2px">🛒 Not in your pantry (${need.length})</div>`;
+    h+=need.map(function(n){ return `<div style="padding:7px 0;border-bottom:1px solid var(--line)">❌ ${escapeHtml(n)}</div>`; }).join("");
+    if(canEdit()) h+=`<button class="btn" id="btnRecipeAddMissing" style="margin-top:12px">🛒 Add ${need.length} missing to Grocery</button>`;
+  }
+  if(!have.length && !need.length) h=`<div class="sub-hint">No ingredients found — paste a list with one item per line (or separated by commas).</div>`;
+  $("#recipeResults").innerHTML=h;
+  const b=$("#btnRecipeAddMissing");
+  if(b) b.addEventListener("click",function(){ addMissingToGrocery(need); b.textContent="✓ Added to Grocery"; b.disabled=true; });
+}
+function addMissingToGrocery(list){
+  if(!requireEdit()) return;
+  let added=0;
+  list.forEach(function(nm){
+    const name=titleCase(nm);
+    if(state.items.some(function(i){return i.location==="grocery" && i.name.toLowerCase()===name.toLowerCase();})) return;
+    state.items.push({id:uid(),name:name,category:(typeof autoCategory==="function"?autoCategory(name):"Other"),location:"grocery",percent:null,qty:"",checked:false,photo:null,exp:null,opened:null,store:"pantry",note:""});
+    added++;
+  });
+  save(); renderAll();
+  toast("🛒 Added "+added+" item(s) to your grocery list","good");
+}
+function openRecipeSheet(){ $("#recipeResults").innerHTML=""; recipeScrim.classList.add("on"); setTimeout(function(){ const t=$("#recipeText"); if(t) t.focus(); },150); }
+$("#btnRecipe") && $("#btnRecipe").addEventListener("click",openRecipeSheet);
+$("#btnRecipeClose") && $("#btnRecipeClose").addEventListener("click",function(){ recipeScrim.classList.remove("on"); });
+recipeScrim && recipeScrim.addEventListener("click",function(e){ if(e.target===recipeScrim) recipeScrim.classList.remove("on"); });
+$("#btnRecipeCheck") && $("#btnRecipeCheck").addEventListener("click",function(){ renderRecipeResults(parseRecipeLines($("#recipeText").value)); });
+
 load();
 switchTab("pantry");
 renderAll();
