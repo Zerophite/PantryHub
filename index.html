@@ -183,6 +183,7 @@ body.viewonly .cathead .catadd{display:none}
 .recrow.tappable{cursor:pointer}
 .recpct{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .recpct button{flex:1 0 auto;min-width:52px;padding:8px 0;border-radius:10px;border:1.5px solid var(--line);background:var(--card);font-weight:700;font-size:13px;color:var(--ink)}
+.recpct button.on{background:var(--green);color:#fff;border-color:var(--green)}
 .note .ndel{position:absolute;top:10px;right:10px;color:var(--muted);font-size:16px;width:28px;height:28px}
 
 .empty{text-align:center;color:var(--muted);padding:60px 20px}
@@ -590,7 +591,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 61 · 2026-09-11</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 63 · 2026-09-11</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2055,7 +2056,7 @@ function itemCardHTML(it,mode,showCat,opts){
   else if(fs && mode!=="grocery"){ sub.push(`<span class="pill ${fs.level==='bad'?'bad':fs.level==='warn'?'warn':'ok'}">${fs.level==='ok'?'🟢':fs.level==='warn'?'⏳':'⚠️'} ${fs.source==='bought'?'≈ ':''}${fs.label}</span>`); }
   if(mode!=="grocery" && it.opened && !agesFromPurchase(it)) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
   else if(mode!=="grocery" && !it.opened && !agesFromPurchase(it) && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
-  if(it.store && it.store!=="pantry" && mode!=="grocery") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
+  if(it.store && it.store!=="pantry") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
 
   const barHTML=(it.percent!=null)?`<div class="bar ${pctClass(it.percent)}"><i style="width:${it.percent}%"></i></div>`:"";
   const pctInline = usesCount(it) ? "" : `<div class="pctchips">`+[5,10,25,50,75,100].map(p=>`<button type="button" data-pct="${p}" data-pid="${it.id}" class="${it.percent===p?'on':''}">${p}</button>`).join("")+`</div>`;
@@ -4063,7 +4064,8 @@ const _QUAL=/^(neutral|vegetable|veg|cooking|any|frying|all|plain|table|fine|coa
 const _GENERIC_HEAD=/^(oil|sauce|vinegar|sugar|flour|milk|cheese|pepper|salt|powder|paste|stock|broth|wine|cream|butter|rice|juice|syrup|seasoning|spice|herb|water|starch)$/i;
 function _sing(w){ return (w.length>3 && /s$/.test(w) && !/ss$/.test(w)) ? w.slice(0,-1) : w; }   // rough singularize (lemons->lemon)
 function _words(str){ return normName(str).split(" ").map(_sing).filter(function(w){return w.length>1;}); }
-function _ingSyn(iw){ if(iw.length===1 && iw[0]==="pepper") return ["black","pepper"]; return iw; }   // bare "pepper" = black pepper
+const _SYN={mayo:"mayonnaise",mayonaise:"mayonnaise",veggie:"vegetable",scallion:"onion",cilantro:"coriander"};
+function _ingSyn(iw){ iw=iw.map(function(w){ return _SYN[w]||w; }); if(iw.length===1 && iw[0]==="pepper") return ["black","pepper"]; return iw; }   // synonyms + bare "pepper" = black pepper
 function findPantryMatch(ing){
   let iw=_ingSyn(_words(ing));
   if(!iw.length) return null;
@@ -4099,7 +4101,7 @@ function renderRecipeResults(ings){
       const loc = x.m.store==="tap" ? "🚰 Always at home" : (x.m.store==="fridge"?"❄️ Fridge":x.m.store==="freezer"?"🧊 Freezer":"🧺 Pantry");
       const id = x.m.id;
       const left = (id && x.m.percent!=null) ? ` <span style="opacity:.6">· ${x.m.percent}% left</span>` : "";
-      const pct = id ? `<div class="recpct" hidden>`+[5,10,25,50,75,100].map(function(p){return `<button type="button" data-recuse="${id}" data-recpct="${p}">${p}%</button>`;}).join("")+`</div>` : "";
+      const pct = id ? `<div class="recpct" hidden>`+[5,10,25,50,75,100].map(function(p){return `<button type="button" class="${x.m.percent===p?"on":""}" data-recuse="${id}" data-recpct="${p}">${p}%</button>`;}).join("")+`</div>` : "";
       return `<div class="recrow${id?" tappable":""}"${id?` data-rectoggle="${id}"`:""}>✅ <b>${escapeHtml(x.ing)}</b> <span style="opacity:.65">— ${escapeHtml(x.m.name)} · ${loc}</span>${left}${pct}</div>`;
     }).join("");
     h+=`<div class="sub-hint" style="margin:6px 0 0">Tap an item you used to set how much is left.</div>`;
