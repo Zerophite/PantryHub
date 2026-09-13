@@ -198,8 +198,8 @@ body.viewonly .cathead .catadd{display:none}
   box-shadow:0 6px 16px rgba(46,125,50,.45);
 }
 .fab:active{transform:scale(.94)}
-.fab.mic{right:18px;bottom:calc(154px + env(safe-area-inset-bottom));background:linear-gradient(135deg,#42a5f5,#1e88e5);box-shadow:0 6px 16px rgba(30,136,229,.4);width:52px;height:52px;font-size:24px}
-.fab.scan{right:18px;bottom:calc(224px + env(safe-area-inset-bottom));background:linear-gradient(135deg,#7e57c2,#5e35b1);box-shadow:0 6px 16px rgba(94,53,177,.4);width:52px;height:52px;font-size:24px}
+.fab.mic{display:none!important}
+.fab.scan{right:18px;bottom:calc(154px + env(safe-area-inset-bottom));background:linear-gradient(135deg,#7e57c2,#5e35b1);box-shadow:0 6px 16px rgba(94,53,177,.4);width:52px;height:52px;font-size:24px}
 .fab.mic.listening{animation:pulse 1.1s infinite;background:linear-gradient(135deg,#ef5350,#e53935)}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(229,57,53,.5)}70%{box-shadow:0 0 0 16px rgba(229,57,53,0)}100%{box-shadow:0 0 0 0 rgba(229,57,53,0)}}
 
@@ -591,7 +591,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 63 · 2026-09-11</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 64 · 2026-09-13</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1743,7 +1743,8 @@ function bestStore(sl, opened){
   const f=sl.fridge||0, z=sl.freezer||0, p=sl.pantry||0;
   if(!f && !z && !p) return null;
   if(!opened){ if(p>=30) return "pantry"; if(f>0 && f>p) return "fridge"; if(p>0) return "pantry"; return "freezer"; }
-  if(f>0 && (f>=p || p<=2)) return "fridge";
+  if(p>=60) return "pantry";                 // shelf-stable once opened (vinegar, oil, honey) -> stays put
+  if(f>0 && f>p) return "fridge";            // perishable once opened -> fridge only if it keeps longer
   if(p>0) return "pantry";
   if(z>0) return "freezer";
   return "fridge";
@@ -2165,7 +2166,7 @@ function renderPantry(){
   host.innerHTML=html; hydratePhotos();
 }
 
-const GROC_SCAN_BAR='<button class="btn" id="btnGrocScan" style="margin:2px 0 14px;width:100%;font-size:16px">🛒 Grocery Scanner</button>';
+const GROC_SCAN_BAR='<button class="btn" id="btnGrocScan" style="margin:2px 0 14px;width:100%;font-size:16px;background:linear-gradient(135deg,#ff9800,#f57c00);color:#fff;box-shadow:0 4px 14px rgba(245,124,0,.4)">📷 Scan groceries to check off</button>';
 function renderGrocery(){
   const host=$("#view-grocery");
   const items=state.items.filter(i=>i.location==="grocery" && itemMatchesSearch(i));
@@ -2240,7 +2241,7 @@ function switchTab(t){
   const map={pantry:[SHELVES,"Pantry"],grocery:["🛒","Grocery"],notes:["📝","Notes"]};
   $("#hEmoji").innerHTML=map[t][0]; $("#hTitle").textContent=map[t][1];
   $("#search").placeholder = t==="notes" ? "Search notes…" : "Search pantry & grocery…";
-  { const fscan=$("#fabScan"); if(fscan) fscan.style.display = (t==="notes")?"none":"flex"; }
+  { const fscan=$("#fabScan"); if(fscan) fscan.style.display = (t==="notes"||t==="grocery")?"none":"flex"; }
   renderAll();
   { const _m=document.querySelector("main"); if(_m) _m.scrollTop=0; }
 }
@@ -3588,15 +3589,17 @@ function voiceStop(){
 }
 
 function findItemByName(q){
-  q=q.trim().toLowerCase();
+  q=(q||"").trim().toLowerCase();
   if(!q) return null;
   let it=state.items.find(i=>i.name.toLowerCase()===q);
   if(it) return it;
-  it=state.items.find(i=>i.name.toLowerCase().includes(q));
-  if(it) return it;
-  // match by significant words
-  const words=q.split(/\s+/).filter(w=>w.length>2);
-  return state.items.find(i=>words.some(w=>i.name.toLowerCase().includes(w)))||null;
+  const qw=normName(q).split(" ").filter(function(w){return w.length>1;});
+  if(!qw.length) return null;
+  return state.items.find(function(i){
+    const iw=normName(i.name).split(" ").filter(function(w){return w.length>1;});
+    if(!iw.length) return false;
+    return iw.every(function(w){return qw.indexOf(w)>=0;}) || qw.every(function(w){return iw.indexOf(w)>=0;});   // whole-word, both directions
+  })||null;
 }
 
 function handleVoice(t, original){
