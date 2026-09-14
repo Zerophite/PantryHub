@@ -591,7 +591,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 67 · 2026-09-13</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 68 · 2026-09-14</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2356,7 +2356,7 @@ $("#btnClearChecked").addEventListener("click",()=>{
   const checked=state.items.filter(i=>i.location==="grocery"&&i.checked);
   if(!checked.length) return;
   if(!confirm(`Move ${checked.length} checked item(s) back to the pantry as restocked (100%)?`)) return;
-  checked.forEach(i=>{ i.location="pantry"; i.checked=false; if(i.percent!=null) i.percent=100; });
+  checked.forEach(i=>{ i.location="pantry"; i.checked=false; i.opened=null; i.exp=null; if(i.percent!=null) i.percent=100; i.created=Date.now(); const _rec=bestStore(shelfLife(i.name,i.category),false); i.store=_rec||"pantry"; });
   save(); renderAll(); toast(`✅ ${checked.length} item(s) restocked to pantry`,"good");
 });
 
@@ -2694,6 +2694,8 @@ let pendingPhoto=null;
 let pendingBarcode=null;
 let chainDate=false;   // after a barcode scan, auto-open the expiry-date scanner
 let rapidMode=false;   // hands-free loop: barcode -> date -> auto-save -> next barcode
+let grocLoop=false;    // grocery scanner: after each scan, reopen the camera for the next item
+function grocScanNext(){ if(!grocLoop) return; setTimeout(function(){ if(!grocLoop) return; if(currentTab!=="grocery") return; if(itemScrim.classList.contains("on")) return; if(camView.style.display!=="none") return; scanTarget="grocery"; openCamera("barcode"); }, 450); }
 let scanGen=0;         // scan-session token — a slow barcode lookup is dropped once the sheet closes or a new scan begins
 let backupForId=null;
 function normName(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
@@ -2913,7 +2915,7 @@ async function startDateScan(){
     scanning=false;
   },1300);
 }
-function _camCloseSmart(){ const dateStep=(camMode==="date"); closeCamera(); rapidMode=false; chainDate=false;
+function _camCloseSmart(){ const dateStep=(camMode==="date"); closeCamera(); rapidMode=false; grocLoop=false; chainDate=false;
   if(dateStep){ toast("Set a date below if you want, then Save","good"); return; }   // land on the filled form
   if(!$("#fName").value.trim()) closeItemSheet();
 }
@@ -3174,27 +3176,29 @@ function productCore(name){
 // Restock a grocery line from the item you actually bought (a different brand): move it into the
 // pantry, updated to what you scanned. Never deletes — reversible via Undo.
 function restockGroceryLine(it, info, code){
-  const prev={location:it.location,checked:it.checked,name:it.name,barcode:it.barcode,photo:it.photo,percent:it.percent,exp:it.exp,opened:it.opened,store:it.store,category:it.category};
-  it.location="pantry"; it.checked=false; it.percent=100; it.exp=null; it.opened=null;
+  const prev={location:it.location,checked:it.checked,name:it.name,barcode:it.barcode,photo:it.photo,percent:it.percent,exp:it.exp,opened:it.opened,store:it.store,category:it.category,created:it.created};
+  it.location="pantry"; it.checked=false; it.percent=100; it.exp=null; it.opened=null; it.created=Date.now();
   if(info.name) it.name=titleCase(info.name);
   if(code) it.barcode=code;
   if(info.category && CAT_ORDER.includes(info.category)) it.category=info.category;
   if(info.photo && /^https?:/.test(info.photo)) it.photo=info.photo;
-  const _rec=bestStore(shelfLife(it.name,it.category),false); if(_rec) it.store=_rec;
+  const _rec=bestStore(shelfLife(it.name,it.category),false); it.store=_rec||"pantry";   // fresh, sealed restock -> don't inherit an old "opened -> fridge" setting
   save(); renderAll();
   toastUndo(`✅ “${it.name}” restocked into your Pantry`,"good",()=>{ Object.assign(it,prev); save(); renderAll(); });
+  grocLoop=false;
+  setTimeout(function(){ if(!getItem(it.id)) return; openItemSheet(it.id); chainDate=false; openCamera("date"); }, 400);   // ask for the expiry date of the restocked item
 }
 async function groceryScanBarcode(code){
   const gro=state.items.find(i=>i.barcode===code && i.location==="grocery");
-  if(gro){ gro.checked=true; save(); renderAll(); toast(`🛒 “${gro.name}” checked off into the cart`,"good"); return; }
+  if(gro){ gro.checked=true; save(); renderAll(); toast(`🛒 “${gro.name}” checked off into the cart`,"good"); grocScanNext(); return; }
   const pan=state.items.find(i=>i.barcode===code && i.location==="pantry");
-  if(pan){ offerDuplicate(pan); return; }
+  if(pan){ grocLoop=false; offerDuplicate(pan); return; }
   toast("🔎 Looking up product…","good");
   const info=await resolveProduct(code);
   const byName=info.name?findItemByName(info.name):null;
   if(byName){
-    if(byName.location==="grocery"){ byName.barcode=byName.barcode||code; byName.checked=true; save(); renderAll(); toast(`🛒 “${byName.name}” checked off`,"good"); }
-    else offerDuplicate(byName);
+    if(byName.location==="grocery"){ byName.barcode=byName.barcode||code; byName.checked=true; save(); renderAll(); toast(`🛒 “${byName.name}” checked off`,"good"); grocScanNext(); }
+    else { grocLoop=false; offerDuplicate(byName); }
     return;
   }
   // Same product, different brand? Match on the brand-stripped core against the grocery list.
@@ -3205,20 +3209,21 @@ async function groceryScanBarcode(code){
       if(cand){
         if(confirm(`Scanned: “${info.name}”.\n\nThis looks like “${cand.name}” on your grocery list — same item, different brand.\n\nMark it bought and stock it in your pantry?`)){
           restockGroceryLine(cand, info, code);
-        }
+        } else { grocScanNext(); }
         return;
       }
     }
   }
   const label=info.name||("Product "+code);
   if(confirm(`“${label}” isn't on your grocery list or in your pantry.\n\nAdd it to your grocery list?`)){
+    grocLoop=false;
     openItemSheet();
     pendingBarcode=code;
     if(info.name) $("#fName").value=info.name;
     if(info.category) setCatSelect(info.category);
     if(info.photo){ pendingPhoto=info.photo; showPhoto(pendingPhoto); }
     updateFreshInfo();
-  }
+  } else { grocScanNext(); }
 }
 
 async function lookupBarcode(code){
@@ -3763,7 +3768,7 @@ function toast(msg,kind){
   setTimeout(()=>{ el.classList.remove("show"); setTimeout(()=>el.remove(),300); }, 3200);
 }
 window.__toast=toast;
-document.addEventListener("click",e=>{ if(e.target.closest && e.target.closest("#btnGrocScan")){ scanTarget="grocery"; openCamera("barcode"); } });
+document.addEventListener("click",e=>{ if(e.target.closest && e.target.closest("#btnGrocScan")){ grocLoop=true; scanTarget="grocery"; openCamera("barcode"); } });
 // A toast with a real Undo button (the toast layer itself is click-through; only the button catches taps).
 function toastUndo(msg,kind,undoFn){
   toast(msg+' <button class="tundo" type="button">Undo</button>',kind);
@@ -4069,6 +4074,7 @@ function parseRecipeLines(text){
 const _RFORM=/^(powder|powdered|sauce|paste|oil|seasoning|flavou?red|flavou?r|hoisin|dressing|marinade|marinated|cube|cubes|bouillon|smoke|smoked|vinegar|syrup|jam|jelly|preserve|marmalade|extract|essence|juice|chip|chips|crisp|mix|icing|brown|confectioners|instant|pickled|concentrate|stock|broth|starch|drink|soda|cordial)$/i;
 const _QUAL=/^(neutral|vegetable|veg|cooking|any|frying|all|plain|table|fine|coarse|regular|pure|light|dark|raw|whole|ground|granulated|powdered|white|fresh|dried|prepared|classic|original|unsalted|salted|low|reduced|extra|virgin|medium|large|small|hot|mild|sweet)$/i;
 const _GENERIC_HEAD=/^(oil|sauce|vinegar|sugar|flour|milk|cheese|pepper|salt|powder|paste|stock|broth|wine|cream|butter|rice|juice|syrup|seasoning|spice|herb|water|starch)$/i;
+const _SNACKFORM=/^(cracker|crackers|sandwich|sandwiches|cookie|cookies|biscuit|biscuits|wafer|wafers|candy|candies|puff|puffs|pastry|pastries|donut|donuts|doughnut|doughnuts|nugget|nuggets|pie|pies)$/i;   // a snack/prepared product, never a raw ingredient
 function _sing(w){ return (w.length>3 && /s$/.test(w) && !/ss$/.test(w)) ? w.slice(0,-1) : w; }   // rough singularize (lemons->lemon)
 function _words(str){ return normName(str).split(" ").map(_sing).filter(function(w){return w.length>1;}); }
 const _SYN={mayo:"mayonnaise",mayonaise:"mayonnaise",veggie:"vegetable",scallion:"onion",cilantro:"coriander"};
@@ -4084,7 +4090,8 @@ function findPantryMatch(ing){
   for(const it of state.items){
     if(it.location!=="pantry") continue;
     const itw=_words(it.name);
-    if(itw.indexOf(head)<0) continue;                                    // item must contain the head noun
+    if(itw.indexOf(head)<0) continue;
+    if(itw.some(function(w){ return _SNACKFORM.test(w) && iw.indexOf(w)<0; })) continue;   // a snack product ("cream cracker sandwich") is not the raw ingredient ("cream")                                    // item must contain the head noun
     if(!ingForm && itw.some(function(w){ return _RFORM.test(w) && iw.indexOf(w)<0; })) continue;      // different form -> skip
     if(genericHead && mods.length && !mods.every(function(w){ return itw.indexOf(w)>=0; })) continue; // generic head needs its modifier (SESAME oil != avocado oil)
     if(head==="oil" && !mods.length && /sesame|olive|chili|chilli|truffle|walnut|almond|coconut|peanut|hazelnut/.test((it.name||"").toLowerCase())) continue; // plain "oil" != a flavoured oil
