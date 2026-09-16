@@ -591,7 +591,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 68 · 2026-09-14</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 72 · 2026-09-16</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1742,6 +1742,7 @@ function shelfLife(name,cat){
 }
 // Recommend where to keep an item, from its shelf-life numbers. Unopened shelf-stable -> pantry;
 // once opened, the fridge usually wins. Returns "pantry" | "fridge" | "freezer" | null (no guidance).
+function isProduceCat(cat){ return /fruit|veg|produce/i.test(cat||""); }   // auto fridge/freezer applies ONLY to fresh produce — the user decides storage for everything else
 function bestStore(sl, opened){
   if(!sl) return null;
   const f=sl.fridge||0, z=sl.freezer||0, p=sl.pantry||0;
@@ -2086,7 +2087,6 @@ function itemCardHTML(it,mode,showCat,opts){
     </div>
     <div class="act">
       <div class="qstep"><button data-dec="${it.id}" title="Use one">−</button><button class="qnum" data-setcount="${it.id}" title="Tap to type an amount">${itemCount(it)}</button><button data-inc="${it.id}" title="Add one">+</button></div>
-      <button class="moveBtn togro" data-move="${it.id}" title="Need to buy">🛒</button>
     </div>
   </div>`;
 }
@@ -2174,7 +2174,7 @@ const GROC_SCAN_BAR='<button class="btn" id="btnGrocScan" style="margin:2px 0 14
 function renderGrocery(){
   const host=$("#view-grocery");
   const items=state.items.filter(i=>i.location==="grocery" && itemMatchesSearch(i));
-  if(!items.length){ host.innerHTML=GROC_SCAN_BAR+emptyHTML(searchQ?"🔍":"🛒", searchQ?"No grocery items match.":"Your grocery list is empty.<br>Tap 🛒 on any pantry item, or use voice."); return; }
+  if(!items.length){ host.innerHTML=GROC_SCAN_BAR+emptyHTML(searchQ?"🔍":"🛒", searchQ?"No grocery items match.":"Your grocery list is empty.<br>Use 📖 Recipe check to add what you're missing, or 📷 scan groceries."); return; }
   // sort: unchecked first, grouped by category
   let html=GROC_SCAN_BAR;
   const active=items.filter(i=>!i.checked), done=items.filter(i=>i.checked);
@@ -2293,7 +2293,7 @@ function markOpened(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
   it.opened=todayISO();
-  const _rec=bestStore(shelfLife(it.name,it.category),true);
+  const _rec=isProduceCat(it.category)?bestStore(shelfLife(it.name,it.category),true):null;
   let _moved=false;
   if(_rec && it.store!==_rec){ it.store=_rec; _moved=true; }
   save(); renderAll();
@@ -2330,7 +2330,7 @@ function setCountPrompt(id){
 }
 function decCount(id){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; const c=itemCount(it);
   if(c>1){ it.count=c-1; save(); renderAll(); }
-  else { if(confirm("That's your last “"+it.name+"”. Move it to the grocery list?")) moveItem(id); } }
+  else { if(confirm("That's your last “"+it.name+"”. Remove it from your pantry?")){ state.items=state.items.filter(x=>x.id!==it.id); save(); renderAll(); toast("Removed: "+it.name,"good"); } } }
 function moveItem(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
@@ -2356,7 +2356,7 @@ $("#btnClearChecked").addEventListener("click",()=>{
   const checked=state.items.filter(i=>i.location==="grocery"&&i.checked);
   if(!checked.length) return;
   if(!confirm(`Move ${checked.length} checked item(s) back to the pantry as restocked (100%)?`)) return;
-  checked.forEach(i=>{ i.location="pantry"; i.checked=false; i.opened=null; i.exp=null; if(i.percent!=null) i.percent=100; i.created=Date.now(); const _rec=bestStore(shelfLife(i.name,i.category),false); i.store=_rec||"pantry"; });
+  checked.forEach(i=>{ i.location="pantry"; i.checked=false; i.opened=null; if(i.percent!=null) i.percent=100; i.created=Date.now(); const _rec=isProduceCat(i.category)?bestStore(shelfLife(i.name,i.category),false):null; i.store=_rec||"pantry"; });
   save(); renderAll(); toast(`✅ ${checked.length} item(s) restocked to pantry`,"good");
 });
 
@@ -2451,7 +2451,7 @@ function openItemSheet(id){
   $("#autoCatTag").textContent="";
   $("#editExtraBtns").style.display=it?"flex":"none";
   { const bn=$("#btnSaveNext"); if(bn) bn.style.display=it?"none":""; }
-  $("#btnMoveItem").textContent = it&&it.location==="pantry" ? "Move to Grocery" : "Move to Pantry";
+  { const _mb=$("#btnMoveItem"); if(_mb){ if(it && it.location==="grocery"){ _mb.style.display=""; _mb.textContent="Move to Pantry"; } else { _mb.style.display="none"; } } }
   updateFreshInfo();
   { const g=$("#chipGoogleImg"); if(g) g.style.display=isAdmin()?"":"none"; const pz=$("#chipPasteImg"); if(pz) pz.style.display=isAdmin()?"":"none"; }
   itemScrim.classList.add("on");
@@ -2522,7 +2522,7 @@ function updateFreshInfo(){
   const vac=$("#fVac")?$("#fVac").checked:false;
   const sl=shelfLife(nm, $("#fCat")&&$("#fCat").value);
   // Recommend a spot and auto-select it for a fresh add (until the user picks one themselves).
-  const rec=bestStore(sl, !!opened);
+  const rec=isProduceCat($("#fCat")&&$("#fCat").value)?bestStore(sl, !!opened):null;
   if(rec && !storeTouched && rec!==storeVal){ storeVal=rec; $$("#segStore button").forEach(b=>b.classList.toggle("on",b.dataset.v===rec)); }
   const tmp={name:nm,store:storeVal,opened:opened||null,exp:exp||null,vac};
   let recLine="";
@@ -2695,6 +2695,7 @@ let pendingBarcode=null;
 let chainDate=false;   // after a barcode scan, auto-open the expiry-date scanner
 let rapidMode=false;   // hands-free loop: barcode -> date -> auto-save -> next barcode
 let grocLoop=false;    // grocery scanner: after each scan, reopen the camera for the next item
+let grocExpiryId=null; // when set, the date scanner writes the expiry onto this grocery line, then keeps scanning
 function grocScanNext(){ if(!grocLoop) return; setTimeout(function(){ if(!grocLoop) return; if(currentTab!=="grocery") return; if(itemScrim.classList.contains("on")) return; if(camView.style.display!=="none") return; scanTarget="grocery"; openCamera("barcode"); }, 450); }
 let scanGen=0;         // scan-session token — a slow barcode lookup is dropped once the sheet closes or a new scan begins
 let backupForId=null;
@@ -2915,13 +2916,14 @@ async function startDateScan(){
     scanning=false;
   },1300);
 }
-function _camCloseSmart(){ const dateStep=(camMode==="date"); closeCamera(); rapidMode=false; grocLoop=false; chainDate=false;
+function _camCloseSmart(){ const dateStep=(camMode==="date"); closeCamera(); rapidMode=false; grocLoop=false; grocExpiryId=null; chainDate=false;
   if(dateStep){ toast("Set a date below if you want, then Save","good"); return; }   // land on the filled form
   if(!$("#fName").value.trim()) closeItemSheet();
 }
 $("#camSkipDate") && $("#camSkipDate").addEventListener("click",()=>{
   $("#fExp").value=""; if(typeof fillSelectsFromExp==="function") fillSelectsFromExp();
-  const wasRapid=rapidMode; closeCamera();
+  const wasRapid=rapidMode, wasGroc=grocExpiryId; closeCamera();
+  if(wasGroc){ grocExpiryId=null; toast("No date — skipped","good"); grocScanNext(); return; }
   if(wasRapid){ rapidSaveAndNext(); }
 });
 $("#camClose").addEventListener("click",_camCloseSmart);
@@ -3182,22 +3184,59 @@ function restockGroceryLine(it, info, code){
   if(code) it.barcode=code;
   if(info.category && CAT_ORDER.includes(info.category)) it.category=info.category;
   if(info.photo && /^https?:/.test(info.photo)) it.photo=info.photo;
-  const _rec=bestStore(shelfLife(it.name,it.category),false); it.store=_rec||"pantry";   // fresh, sealed restock -> don't inherit an old "opened -> fridge" setting
+  const _rec=isProduceCat(it.category)?bestStore(shelfLife(it.name,it.category),false):null; it.store=_rec||"pantry";   // fresh, sealed restock -> don't inherit an old "opened -> fridge" setting
   save(); renderAll();
   toastUndo(`✅ “${it.name}” restocked into your Pantry`,"good",()=>{ Object.assign(it,prev); save(); renderAll(); });
   grocLoop=false;
   setTimeout(function(){ if(!getItem(it.id)) return; openItemSheet(it.id); chainDate=false; openCamera("date"); }, 400);   // ask for the expiry date of the restocked item
 }
+// Check a grocery line off the list ("in the cart"). If the scan matched by brand/synonym, rename the line
+// to the exact product bought (reversible via Undo), then ask for its expiry date.
+function fulfillGroceryLine(g, info, code){
+  const prev={name:g.name,barcode:g.barcode,checked:g.checked,photo:g.photo,category:g.category};
+  const renamed = info && info.name && normName(info.name)!==normName(g.name);
+  if(renamed) g.name=titleCase(info.name);
+  if(code) g.barcode=g.barcode||code;
+  if(info && info.category && CAT_ORDER.includes(info.category)) g.category=info.category;
+  if(info && info.photo && /^https?:/.test(info.photo) && !g.photo) g.photo=info.photo;
+  g.checked=true;
+  save(); renderAll();
+  if(renamed) toastUndo("🛒 “"+g.name+"” checked off — matched your list","good",function(){ Object.assign(g,prev); save(); renderAll(); });
+  else toast("🛒 “"+g.name+"” checked off into the cart","good");
+  askGrocExpiry(g.id);
+}
+// Does a scanned product fulfill something on the grocery list? Same-item/different-brand AND
+// generic recipe entries vs branded products ("chicken stock" <- "Campbell\u2019s Chicken Broth Unsalted").
+function _isFreshNeed(a){ return !!(a && a.length && _PRODUCE_HEAD.test(a[a.length-1]) && !a.some(function(w){ return _PRODUCE_DERIV.test(w); })); }
+function groceryMatchFor(scannedName){
+  const groc=state.items.filter(function(i){ return i.location==="grocery" && !i.checked; });
+  if(!groc.length || !scannedName) return null;
+  const cw=_ingSyn(_words(scannedName));
+  const sc=productCore(scannedName);
+  const scFresh=_isFreshNeed(cw);
+  let best=null, bestExtra=1e9;
+  for(const g of groc){
+    const need=_ingSyn(_words(g.name));
+    const fresh=scFresh || _isFreshNeed(need);                          // fresh produce on either side -> strict only
+    let extra=_ingScore(need, scannedName);                             // forward: the grocery line is the need
+    if(extra<0 && !fresh) extra=_ingScore(cw, g.name);                  // reverse: scanned is generic, the line is the specific product
+    if(extra<0 && !fresh && sc && productCore(g.name)===sc) extra=0;    // same brand-free core (different brands of a packaged good)
+    if(extra>=0 && extra<bestExtra){ bestExtra=extra; best=g; }
+  }
+  return best;
+}
+// After a check-off, pop the date scanner to capture the expiry onto the line, then keep scanning.
+function askGrocExpiry(id){ grocExpiryId=id; setTimeout(function(){ if(getItem(grocExpiryId)) openCamera("date"); else grocScanNext(); }, 300); }
 async function groceryScanBarcode(code){
   const gro=state.items.find(i=>i.barcode===code && i.location==="grocery");
-  if(gro){ gro.checked=true; save(); renderAll(); toast(`🛒 “${gro.name}” checked off into the cart`,"good"); grocScanNext(); return; }
+  if(gro){ fulfillGroceryLine(gro, null, code); return; }
   const pan=state.items.find(i=>i.barcode===code && i.location==="pantry");
   if(pan){ grocLoop=false; offerDuplicate(pan); return; }
   toast("🔎 Looking up product…","good");
   const info=await resolveProduct(code);
   const byName=info.name?findItemByName(info.name):null;
   if(byName){
-    if(byName.location==="grocery"){ byName.barcode=byName.barcode||code; byName.checked=true; save(); renderAll(); toast(`🛒 “${byName.name}” checked off`,"good"); grocScanNext(); }
+    if(byName.location==="grocery"){ fulfillGroceryLine(byName, info, code); }
     else { grocLoop=false; offerDuplicate(byName); }
     return;
   }
@@ -3205,10 +3244,10 @@ async function groceryScanBarcode(code){
   if(info.name){
     const _core=productCore(info.name);
     if(_core){
-      const cand=state.items.find(i=>i.location==="grocery" && productCore(i.name)===_core);
+      const cand=groceryMatchFor(info.name);
       if(cand){
         if(confirm(`Scanned: “${info.name}”.\n\nThis looks like “${cand.name}” on your grocery list — same item, different brand.\n\nMark it bought and stock it in your pantry?`)){
-          restockGroceryLine(cand, info, code);
+          fulfillGroceryLine(cand, info, code);
         } else { grocScanNext(); }
         return;
       }
@@ -3219,6 +3258,7 @@ async function groceryScanBarcode(code){
     grocLoop=false;
     openItemSheet();
     pendingBarcode=code;
+    $("#fBarcode").value=code;
     if(info.name) $("#fName").value=info.name;
     if(info.category) setCatSelect(info.category);
     if(info.photo){ pendingPhoto=info.photo; showPhoto(pendingPhoto); }
@@ -3358,6 +3398,7 @@ $("#camShutter").addEventListener("click",async()=>{
       if($("#fExp").value){ toast("✓ Saved — next item","good"); rapidSaveAndNext(); }
       else { toast("Couldn't read the date — tap it below, then Save & scan next","warn"); }
     }
+    if(grocExpiryId){ const _g=getItem(grocExpiryId); const _e=$("#fExp").value; if(_g){ _g.exp=_e||null; save(); renderAll(); } grocExpiryId=null; $("#fExp").value=""; toast(_e?("📅 Expiry set: "+_e):"No date read — you can add it later","good"); grocScanNext(); }
   }else if(camMode==="name"){
     const shot=captureNameRegion(); closeCamera(); await readNameLive(shot);
   }else{
@@ -4075,28 +4116,36 @@ const _RFORM=/^(powder|powdered|sauce|paste|oil|seasoning|flavou?red|flavou?r|ho
 const _QUAL=/^(neutral|vegetable|veg|cooking|any|frying|all|plain|table|fine|coarse|regular|pure|light|dark|raw|whole|ground|granulated|powdered|white|fresh|dried|prepared|classic|original|unsalted|salted|low|reduced|extra|virgin|medium|large|small|hot|mild|sweet)$/i;
 const _GENERIC_HEAD=/^(oil|sauce|vinegar|sugar|flour|milk|cheese|pepper|salt|powder|paste|stock|broth|wine|cream|butter|rice|juice|syrup|seasoning|spice|herb|water|starch)$/i;
 const _SNACKFORM=/^(cracker|crackers|sandwich|sandwiches|cookie|cookies|biscuit|biscuits|wafer|wafers|candy|candies|puff|puffs|pastry|pastries|donut|donuts|doughnut|doughnuts|nugget|nuggets|pie|pies)$/i;   // a snack/prepared product, never a raw ingredient
-function _sing(w){ return (w.length>3 && /s$/.test(w) && !/ss$/.test(w)) ? w.slice(0,-1) : w; }   // rough singularize (lemons->lemon)
+const _PRODUCE_HEAD=/^(onion|garlic|ginger|shallot|leek|scallion|tomatoe?|potatoe?|carrot|celery|cucumber|apple|banana|orange|lemon|lime|mango|avocado|grape|melon|watermelon|pineapple|peach|pear|plum|cherry|coconut|spinach|lettuce|cabbage|broccoli|cauliflower|mushroom|zucchini|eggplant|pumpkin|radish|beet|turnip|kale|parsley|cilantro|coriander|basil|mint|almond|peanut|cashew|walnut|pecan|hazelnut|pistachio)$/i;   // fresh produce / herbs / nuts
+const _PRODUCE_DERIV=/^(milk|cream|butter|flour|meal|bread|ground|dried|dehydrated|flake|flakes|powder|powdered|salt|granule|granules|chip|chips|crisp|crisps|ring|rings|fries|puree|pureed|paste|sauce|juice|extract|essence|oil|syrup|jam|jelly|marmalade|ketchup|relish|pickle|pickled|cider|ale|soda|pop|wine|vinegar|stock|broth|bouillon|concentrate|nib|nibs|starch|seasoning|dip|spread)$/i;   // turns fresh produce into a different product
+function _sing(w){ if(w.length<=3 || !/s$/.test(w) || /ss$/.test(w)) return w; if(/oes$/.test(w)) return w.slice(0,-2); return w.slice(0,-1); }   // singularize (lemons->lemon, tomatoes->tomato)
 function _words(str){ return normName(str).split(" ").map(_sing).filter(function(w){return w.length>1;}); }
-const _SYN={mayo:"mayonnaise",mayonaise:"mayonnaise",veggie:"vegetable",scallion:"onion",cilantro:"coriander"};
+const _SYN={mayo:"mayonnaise",mayonaise:"mayonnaise",veggie:"vegetable",scallion:"onion",cilantro:"coriander",stock:"broth",garbanzo:"chickpea",aubergine:"eggplant",courgette:"zucchini",prawn:"shrimp",soya:"soy"};
 function _ingSyn(iw){ iw=iw.map(function(w){ return _SYN[w]||w; }); if(iw.length===1 && iw[0]==="pepper") return ["black","pepper"]; return iw; }   // synonyms + bare "pepper" = black pepper
+function _ingScore(iw, candName){                     // >=0 means candName satisfies the need "iw" (fewer extras = closer match); -1 = no match
+  if(!iw||!iw.length) return -1;
+  const head=iw[iw.length-1];
+  const mods=iw.slice(0,-1).filter(function(w){ return !_QUAL.test(w); });
+  const genericHead=_GENERIC_HEAD.test(head);
+  const ingForm=iw.some(function(w){ return _RFORM.test(w); });
+  const itw=_ingSyn(_words(candName));               // synonyms both ways (stock<->broth, mayo<->mayonnaise)
+  if(!itw.length) return -1;
+  if(itw.indexOf(head)<0) return -1;                                                    // must contain the head noun
+  if(itw.some(function(w){ return _SNACKFORM.test(w) && iw.indexOf(w)<0; })) return -1; // a snack product is not the raw ingredient
+  if(_PRODUCE_HEAD.test(head) && !iw.some(function(w){return _PRODUCE_DERIV.test(w);}) && itw.some(function(w){ return _PRODUCE_DERIV.test(w) && iw.indexOf(w)<0; })) return -1; // fresh produce ("onion") is not a processed product ("onion powder/salt/rings")
+  if(!ingForm && itw.some(function(w){ return _RFORM.test(w) && iw.indexOf(w)<0; })) return -1; // different form -> no
+  if(genericHead && mods.length && !mods.every(function(w){ return itw.indexOf(w)>=0; })) return -1; // generic head needs its modifier
+  if(head==="oil" && !mods.length && /sesame|olive|chili|chilli|truffle|walnut|almond|coconut|peanut|hazelnut/.test((candName||"").toLowerCase())) return -1;
+  return itw.filter(function(w){ return iw.indexOf(w)<0; }).length;
+}
 function findPantryMatch(ing){
   let iw=_ingSyn(_words(ing));
   if(!iw.length) return null;
-  const head=iw[iw.length-1];                                           // main noun
-  const mods=iw.slice(0,-1).filter(function(w){ return !_QUAL.test(w); }); // meaningful modifiers (drop generic qualifiers like "neutral")
-  const genericHead=_GENERIC_HEAD.test(head);
-  const ingForm=iw.some(function(w){return _RFORM.test(w);});
   let best=null, bestExtra=1e9;
   for(const it of state.items){
     if(it.location!=="pantry") continue;
-    const itw=_words(it.name);
-    if(itw.indexOf(head)<0) continue;
-    if(itw.some(function(w){ return _SNACKFORM.test(w) && iw.indexOf(w)<0; })) continue;   // a snack product ("cream cracker sandwich") is not the raw ingredient ("cream")                                    // item must contain the head noun
-    if(!ingForm && itw.some(function(w){ return _RFORM.test(w) && iw.indexOf(w)<0; })) continue;      // different form -> skip
-    if(genericHead && mods.length && !mods.every(function(w){ return itw.indexOf(w)>=0; })) continue; // generic head needs its modifier (SESAME oil != avocado oil)
-    if(head==="oil" && !mods.length && /sesame|olive|chili|chilli|truffle|walnut|almond|coconut|peanut|hazelnut/.test((it.name||"").toLowerCase())) continue; // plain "oil" != a flavoured oil
-    const extra=itw.filter(function(w){ return iw.indexOf(w)<0; }).length;  // prefer the closest item
-    if(extra<bestExtra){ bestExtra=extra; best=it; }
+    const extra=_ingScore(iw, it.name);
+    if(extra>=0 && extra<bestExtra){ bestExtra=extra; best=it; }
   }
   return best;
 }
