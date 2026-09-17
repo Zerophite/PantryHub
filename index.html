@@ -591,7 +591,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 77 · 2026-09-17</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 78 · 2026-09-17</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -4100,17 +4100,31 @@ $("#btnShowDanger").addEventListener("click",()=>{
 /* ===== Recipe checker: paste a recipe -> see what you already have ===== */
 const recipeScrim=$("#recipeScrim");
 function parseRecipeLines(text){
-  const UNIT=/^(cups?|tbsps?|tsps?|tablespoons?|teaspoons?|grams?|g|kg|kilograms?|ml|l|liters?|litres?|oz|ounces?|lb|lbs|pounds?|cloves?|cans?|packs?|packages?|bunch|bunches|slices?|pieces?|pinch|pinches|dash|dashes|handful|sprigs?|stalks?|sticks?|jars?|bottles?|bags?|heads?)$/i;
-  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|slice|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|cooking|leaves|leaf|sprig|sprigs|stalk|stalks|zest|zested|peel|peeled|seeded|cored|trimmed|halved|quartered|crushed|cracked|heaped|heaping|packed|softened|melted|beaten|cut|into|thin|thick|strips|strip|pieces|piece|chunk|chunks|cube|cubes|sized|etc|eg|ie|of|for|the|to|taste)$/i;
+  const UNIT=/^(cups?|tbsps?|tsps?|tablespoons?|teaspoons?|grams?|g|kg|kilograms?|ml|l|liters?|litres?|oz|ounces?|lb|lbs|pounds?|cloves?|cans?|packs?|packages?|pkgs?|pkg|pcs?|bunch|bunches|slices?|pieces?|pinch|pinches|dash|dashes|handful|sprigs?|stalks?|sticks?|jars?|bottles?|bags?|boxes?|heads?|knobs?)$/i;
+  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|slice|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|cooking|leaves|leaf|sprig|sprigs|stalk|stalks|zest|zested|peel|peeled|seeded|cored|trimmed|halved|quartered|crushed|cracked|heaped|heaping|packed|softened|melted|beaten|cut|into|thin|thick|strips|strip|pieces|piece|chunk|chunks|cube|cubes|sized|etc|eg|ie|of|for|the|to|taste|about|approx|approximately|roughly|plus|more|as|if|needed|divided|serve|serving|garnish|garnishing|grilling|brushing|frying|dusting|greasing|drizzling|scrubbing|room|temperature|preferably|your|favourite|favorite|good|quality)$/i;
+  const NUMWORD=/^(a|an|one|two|three|four|five|six|seven|eight|nine|ten|half|some|few)$/i;
   const out=[];
-  let t=(text||"").replace(/\([^)]*\)/g," ").replace(/([a-zA-Z%\)\]])\s*(\d)/g,"$1\n$2").replace(/([a-zA-Z])\s*([\u00BC\u00BD\u00BE\u2150-\u215E])/g,"$1\n$2");
-  t.split(/[\n,;]+|\bor\b|\band\b|&/i).forEach(function(line){
-    line=line.replace(/\(.*?\)/g," ").replace(/[^a-zA-Z\u00C0-\u017F\s\/-]/g," ");
-    let toks=line.split(/\s+/).filter(function(w){ return w && /[a-zA-Z]/.test(w); });
-    while(toks.length && (UNIT.test(toks[0]) || DESC.test(toks[0]) || /^(a|an|one|two|three|four|five|six|some|few)$/i.test(toks[0]))) toks.shift();
-    toks=toks.filter(function(w){ return !DESC.test(w) && !UNIT.test(w); });
-    const name=toks.join(" ").trim();
-    if(name && name.length>1) out.push(name.toLowerCase());
+  let t=(text||"").replace(/\([^)]*\)/g," ");
+  const manyLines=(t.match(/\n/g)||[]).length>=2;
+  t=t.replace(/([a-zA-Z%\)\]])(\d)/g,"$1\n$2");                       // split glued quantities ("flour2 eggs")
+  if(!manyLines) t=t.replace(/([a-zA-Z%\)\]])\s+(\d)/g,"$1\n$2");     // a pasted paragraph: also split at spaced numbers
+  t=t.replace(/([a-zA-Z])\s*([\u00BC\u00BD\u00BE\u2150-\u215E])/g,"$1\n$2");
+  t.split(/\n+/).forEach(function(raw){
+    let line=raw.replace(/^\s*[-*\u2022\u2013\u2014]?\s*\[\s*[xX ]?\s*\]\s*/,"").replace(/^\s*[-*\u2022\u2013\u2014]\s*/,"").replace(/^\s*\d+[.)]\s*/,"");
+    const bare=line.trim();
+    if(!bare) return;
+    if(/[:\uFF1A]\s*$/.test(bare)) return;                                                          // "Marinade:" heading
+    if(/[a-zA-Z]/.test(bare) && bare===bare.toUpperCase() && !/\d/.test(bare) && bare.split(/\s+/).length<=3) return;  // short ALL-CAPS heading
+    if(/^for the\b/i.test(bare)) return;                                                             // "For the sauce"
+    line.split(/[,;]+|\bor\b|\band\b|&/i).forEach(function(frag){
+      frag=frag.replace(/\(.*?\)/g," ").replace(/[^a-zA-Z\u00C0-\u017F\s\/-]/g," ");
+      let toks=frag.split(/\s+/).filter(function(w){ return w && /[a-zA-Z]/.test(w); });
+      while(toks.length && (UNIT.test(toks[0]) || DESC.test(toks[0]) || NUMWORD.test(toks[0]))) toks.shift();
+      toks=toks.filter(function(w){ return !DESC.test(w) && !UNIT.test(w); });
+      toks=toks.filter(function(w,i){ return toks.indexOf(w)===i; });                                // drop repeats ("chops ... chops")
+      const name=toks.join(" ").trim();
+      if(name && name.length>1) out.push(name.toLowerCase());
+    });
   });
   return Array.from(new Set(out));
 }
