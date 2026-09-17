@@ -591,7 +591,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 75 · 2026-09-17</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 76 · 2026-09-17</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2700,7 +2700,7 @@ let grocExpiryId=null; // when set, the date scanner writes the expiry onto this
 function grocScanNext(){ if(!grocLoop) return; setTimeout(function(){ if(!grocLoop) return; if(currentTab!=="grocery") return; if(itemScrim.classList.contains("on")) return; if(camView.style.display!=="none") return; scanTarget="grocery"; openCamera("barcode"); }, 450); }
 let scanGen=0;         // scan-session token — a slow barcode lookup is dropped once the sheet closes or a new scan begins
 let backupForId=null;
-function normName(s){ return (s||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim(); }
+function normName(s){ return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\u0153/g,"oe").replace(/\u00e6/g,"ae").replace(/[^a-z0-9]+/g," ").trim(); }
 // Fresh produce the app recognises by name (so "Apple" and "Apples" share one image key). Specific first.
 const PRODUCE_SYN=[
   ["sweet potato",["sweet potato","sweet potatoes","kamote"]],
@@ -4122,7 +4122,7 @@ const _PRODUCE_DERIV=/^(milk|cream|butter|flour|meal|bread|ground|dried|dehydrat
 const _WHOLEFORM=/^(stick|whole|seed|pod|nib|sprig|clove)$/i;   // a whole form, distinct from ground/powder
 function _sing(w){ if(w.length<=3 || !/s$/.test(w) || /ss$/.test(w)) return w; if(/oes$/.test(w)) return w.slice(0,-2); return w.slice(0,-1); }   // singularize (lemons->lemon, tomatoes->tomato)
 function _words(str){ return normName(str).replace(/cornstarch/g,"corn starch").replace(/cornflour/g,"corn flour").replace(/cornmeal/g,"corn meal").split(" ").map(_sing).filter(function(w){return w.length>1;}); }
-const _SYN={mayo:"mayonnaise",mayonaise:"mayonnaise",veggie:"vegetable",scallion:"onion",cilantro:"coriander",stock:"broth",garbanzo:"chickpea",aubergine:"eggplant",courgette:"zucchini",prawn:"shrimp",soya:"soy",powder:"ground",powdered:"ground"};
+const _SYN={mayo:"mayonnaise",mayonaise:"mayonnaise",veggie:"vegetable",scallion:"onion",cilantro:"coriander",stock:"broth",garbanzo:"chickpea",aubergine:"eggplant",courgette:"zucchini",prawn:"shrimp",soya:"soy",powder:"ground",powdered:"ground",huile:"oil",olio:"oil",aceite:"oil",ail:"garlic",aglio:"garlic",ajo:"garlic",oignon:"onion",cebolla:"onion",tomate:"tomato",pomodoro:"tomato",poulet:"chicken",pollo:"chicken",boeuf:"beef",porc:"pork",poisson:"fish",pescado:"fish",lait:"milk",leche:"milk",beurre:"butter",fromage:"cheese",queso:"cheese",oeuf:"egg",huevo:"egg",farine:"flour",harina:"flour",sucre:"sugar",sel:"salt",poivre:"pepper",vinaigre:"vinegar",moutarde:"mustard",miel:"honey",riz:"rice",citron:"lemon",creme:"cream",eau:"water"};
 function _ingSyn(iw){ iw=iw.map(function(w){ return _SYN[w]||w; }); if(iw.length===1 && iw[0]==="pepper") return ["black","pepper"]; return iw; }   // synonyms + bare "pepper" = black pepper
 const _JUICEABLE=/^(lemon|lime|orange|grapefruit|calamansi|mandarin|clementine|tangerine|apple|pineapple|pomegranate|cranberry|grape|tomato|carrot|mango|watermelon)$/i;
 function _ingScore(iw, candName){                     // fresh fruit satisfies its juice/zest; otherwise the strict base check
