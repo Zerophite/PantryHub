@@ -591,7 +591,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 78 · 2026-09-17</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 79 · 2026-09-17</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -4101,7 +4101,7 @@ $("#btnShowDanger").addEventListener("click",()=>{
 const recipeScrim=$("#recipeScrim");
 function parseRecipeLines(text){
   const UNIT=/^(cups?|tbsps?|tsps?|tablespoons?|teaspoons?|grams?|g|kg|kilograms?|ml|l|liters?|litres?|oz|ounces?|lb|lbs|pounds?|cloves?|cans?|packs?|packages?|pkgs?|pkg|pcs?|bunch|bunches|slices?|pieces?|pinch|pinches|dash|dashes|handful|sprigs?|stalks?|sticks?|jars?|bottles?|bags?|boxes?|heads?|knobs?)$/i;
-  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|slice|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|cooking|leaves|leaf|sprig|sprigs|stalk|stalks|zest|zested|peel|peeled|seeded|cored|trimmed|halved|quartered|crushed|cracked|heaped|heaping|packed|softened|melted|beaten|cut|into|thin|thick|strips|strip|pieces|piece|chunk|chunks|cube|cubes|sized|etc|eg|ie|of|for|the|to|taste|about|approx|approximately|roughly|plus|more|as|if|needed|divided|serve|serving|garnish|garnishing|grilling|brushing|frying|dusting|greasing|drizzling|scrubbing|room|temperature|preferably|your|favourite|favorite|good|quality)$/i;
+  const DESC=/^(fresh|dried|ground|chopped|minced|sliced|slice|diced|grated|shredded|large|small|medium|ripe|boneless|skinless|optional|whole|extra|lean|organic|raw|cooked|frozen|hot|cold|warm|cooking|leaves|leaf|sprig|sprigs|stalk|stalks|zest|zested|peel|peeled|seeded|cored|trimmed|halved|quartered|crushed|cracked|heaped|heaping|packed|softened|melted|beaten|cut|into|thin|thick|strips|strip|pieces|piece|chunk|chunks|cube|cubes|sized|etc|eg|ie|of|for|the|to|taste|about|approx|approximately|roughly|plus|more|as|if|needed|divided|serve|serving|garnish|garnishing|grilling|brushing|frying|dusting|greasing|drizzling|scrubbing|room|temperature|preferably|your|favourite|favorite|good|quality|measured|correctly|sifted|leveled|level|well|lightly|firmly|loosely|thoroughly|temp|finely|coarsely|freshly|thinly|thickly|evenly|generously|each|total|reserved|drained|rinsed|washed|patted|beaten|room)$/i;
   const NUMWORD=/^(a|an|one|two|three|four|five|six|seven|eight|nine|ten|half|some|few)$/i;
   const out=[];
   let t=(text||"").replace(/\([^)]*\)/g," ");
