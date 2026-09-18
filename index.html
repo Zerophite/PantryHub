@@ -591,7 +591,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 79 · 2026-09-17</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 80 · 2026-09-18</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1433,6 +1433,8 @@ function autoCategory(name){
 // Keyword-only category (no learned prefs) — for re-sorting existing items into the scheme.
 function autoCategoryStrict(name){
   const n=(name||"").toLowerCase();
+  if(/\b(onion|garlic|ginger|chill?i|chile|shallot|scallion)\b/.test(n) && /\b(powder|powdered|granulated|granules?|ground|dried|dehydrated|flakes?|salt|seasoning)\b/.test(n)) return "Spices & Seasonings";  // granulated onion / garlic powder / ground ginger
+  if(/\b(lemon|lime|orange|citrus)\b/.test(n) && /\b(pepper|herbs?|seasoning|spice|rub)\b/.test(n)) return "Spices & Seasonings";  // lemon pepper / lemon & herbs seasoning
   for(const [kws,cat] of CAT_RULES){ for(const kw of kws){ if(n.includes(kw)) return cat; } }
   return null;
 }
