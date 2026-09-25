@@ -592,7 +592,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 87 · 2026-09-25</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 88 · 2026-09-25</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2967,9 +2967,9 @@ async function openCamera(mode){
   $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":mode==="name"?"PRODUCT NAME":"PHOTO";
   $("#camHint").textContent = mode==="barcode"?"Fill the box with the barcode • for round jars keep it centred & flat-on":
     mode==="date"?"Frame the printed date inside the box, hold steady, then tap the shutter":
-    mode==="name"?(window.GEMINI?"Point at the front of the product, hold steady, then tap the shutter":"Frame the product NAME inside the box, hold steady, then tap the shutter"):"Tap to capture";
+    mode==="name"?(window.GEMINI?"Show the front of the product — logo and name in view (the whole pack is fine). Hold steady, then tap the shutter":"Frame the product NAME inside the box, hold steady, then tap the shutter"):"Tap to capture";
   $("#camHint").classList.remove("scanning");
-  $("#camScanBox").style.display = mode==="photo"?"none":"block";
+  $("#camScanBox").style.display = (mode==="photo" || (mode==="name" && window.GEMINI))?"none":"block";
   { const sk=$("#camSkipDate"); if(sk) sk.style.display = (mode==="date")?"block":"none"; }
   $("#camScanBox").classList.remove("scanning");
   try{
@@ -3242,7 +3242,7 @@ function correctWithVocab(name){   // snap misread words to the closest known wo
   const out=(name||"").split(" ").map(function(w){
     const lw=w.toLowerCase(); if(lw.length<4) return w; words++;
     if(V.has(lw)){ hits++; return w; }
-    if(lw.length<5) return w;                       // short words are too easy to mis-snap (real -> meal)
+    if(lw.length<6) return w;                       // short words are too easy to mis-snap (real -> meal, sings -> wings)
     const tol=lw.length>=8?2:1; let best=null, bd=9;
     V.forEach(function(v){ if(Math.abs(v.length-lw.length)>tol) return; const d=_lev(lw,v); if(d<bd){ bd=d; best=v; } });
     if(best && bd<=tol){ hits++; return best; }
@@ -3251,30 +3251,64 @@ function correctWithVocab(name){   // snap misread words to the closest known wo
   return {name:titleCase(out.join(" ").toLowerCase()), score:words?hits/words:0};
 }
 function invertDataUrl(u){ return new Promise(function(res){ const im=new Image(); im.onload=function(){ try{ const c=document.createElement("canvas"); c.width=im.naturalWidth; c.height=im.naturalHeight; const x=c.getContext("2d"); x.drawImage(im,0,0); const d=x.getImageData(0,0,c.width,c.height), D=d.data; for(let i=0;i<D.length;i+=4){ D[i]=255-D[i]; D[i+1]=255-D[i+1]; D[i+2]=255-D[i+2]; } x.putImageData(d,0,0); res(c.toDataURL("image/jpeg",0.9)); }catch(e){ res(null); } }; im.onerror=function(){ res(null); }; im.src=u; }); }
-async function ocrNameMulti(img){   // several passes: normal, sparse text (logos), light-on-dark; keep the most "known" result
-  const worker=await getNameOcrWorker(); let best=null;
-  const pass=async function(src,psm){ try{ await worker.setParameters({tessedit_pageseg_mode:psm}); const r=await worker.recognize(src); return (r&&r.data&&r.data.text)||""; }catch(e){ return ""; } };
-  const consider=function(text){ const g=guessNameFromLabel(fixOcrText(text)); if(!g) return; const c=correctWithVocab(g); if(!best || c.score>best.score || (c.score===best.score && c.name.length>best.name.length)) best=c; };
-  consider(await pass(img,"3"));  if(best && best.score>=0.5){ try{ await worker.setParameters({tessedit_pageseg_mode:"3"}); }catch(e){} return best.name; }
-  consider(await pass(img,"11")); if(best && best.score>=0.5){ try{ await worker.setParameters({tessedit_pageseg_mode:"3"}); }catch(e){} return best.name; }
-  const inv=await invertDataUrl(img); if(inv) consider(await pass(inv,"11"));
-  try{ await worker.setParameters({tessedit_pageseg_mode:"3"}); }catch(e){}
-  return best ? best.name : null;
+// On-device fallback: favour the BIGGEST text on the pack (brand / product name), ignore fine print,
+// and only return a name we're reasonably sure about — never a jumble.
+const _NAME_NOISE=/(net\s*wt|net\s*weight|nutrition|ingredient|calorie|serving|\bper\b|best before|\bexp\b|distributed|manufactured|product of|keep refrigerated|refrigerate|www\.|\.com|\.ca|store in|contains|allergen|fl\s*oz|\d+\s*(g|kg|mg|ml|l|lb|oz)\b|caplets?|tablets?|capsules?)/i;
+async function _ocrLines(worker, src, psm){
+  try{
+    await worker.setParameters({tessedit_pageseg_mode:psm});
+    const r=await worker.recognize(src, {}, {text:true, blocks:true});
+    const d=(r&&r.data)||{}; const lines=(d.lines||[]).slice();
+    if(!lines.length && d.blocks) d.blocks.forEach(function(b){ (b.paragraphs||[]).forEach(function(p){ (p.lines||[]).forEach(function(l){ lines.push(l); }); }); });
+    return lines.map(function(l,i){ return {i:i, text:(l.text||"").trim(), conf:+l.confidence||0, h:l.bbox?Math.max(0,l.bbox.y1-l.bbox.y0):0}; });
+  }catch(e){ return []; }
 }
+function _pickNameFromLines(lines){
+  const clean=lines.map(function(l){
+    const t=fixOcrText(l.text.normalize("NFD").replace(/[\u0300-\u036f]/g,"")).replace(/[^A-Za-z0-9&'\- ]+/g," ").replace(/\s+/g," ").trim();
+    return {i:l.i, t:t, conf:l.conf, h:l.h};
+  }).filter(function(l){
+    const letters=(l.t.match(/[A-Za-z]/g)||[]).length, digits=(l.t.match(/\d/g)||[]).length;
+    return l.t && letters>=3 && digits<=letters/3 && l.conf>=45 && !_NAME_NOISE.test(l.t) && l.t.split(" ").length<=6;
+  });
+  if(!clean.length) return null;
+  const maxH=Math.max.apply(null, clean.map(function(l){ return l.h; }));
+  const big=clean.filter(function(l){ return l.h>=maxH*0.6; }).sort(function(a,b){ return b.h-a.h; }).slice(0,2).sort(function(a,b){ return a.i-b.i; });
+  const words=[]; big.forEach(function(l){ l.t.split(" ").forEach(function(w){ if(w && words.length<6) words.push(w); }); });
+  if(!words.length) return null;
+  const conf=big.reduce(function(sum,l){ return sum+l.conf; },0)/big.length;
+  const c=correctWithVocab(words.join(" "));
+  return {name:c.name, conf:conf, score:c.score};
+}
+async function ocrNameMulti(img){
+  const worker=await getNameOcrWorker(); let best=null;
+  const done=function(v){ try{ worker.setParameters({tessedit_pageseg_mode:"3"}); }catch(e){} return v; };
+  const consider=function(lines){ const p=_pickNameFromLines(lines); if(!p) return; const q=p.conf/100+p.score; if(!best || q>best.q) best={name:p.name, conf:p.conf, score:p.score, q:q}; };
+  const sure=function(){ return best && (best.conf>=75 || best.score>=0.5); };
+  consider(await _ocrLines(worker, img, "3"));  if(sure()) return done(best.name);
+  consider(await _ocrLines(worker, img, "11")); if(sure()) return done(best.name);    // sparse text: logos / scattered words
+  const inv=await invertDataUrl(img); if(inv) consider(await _ocrLines(worker, inv, "11"));   // light text on a dark band
+  return done(sure() ? best.name : null);
+}
+let _aiLastErr="";
 async function readProductName(ocrImg, aiImg){
+  _aiLastErr="";
   if(window.GEMINI && !_aiNameOff()){
-    try{
-      let a=await aiReadName(aiImg||ocrImg);
-      if(!(a && a.name) && !_aiNameOff()){ toast("🔎 Looking closer…","good"); a=await aiReadName(aiImg||ocrImg); }   // one retry: the AI occasionally comes back empty
-      if(a && a.name) return {name:a.name, category:a.category, via:"ai"};
-    }
-    catch(e){ /* AI out of quota / offline -> on-device reading */ }
+    try{ const a=await aiReadName(aiImg||ocrImg); if(a && a.name) return {name:a.name, category:a.category, via:"ai"}; }
+    catch(e){ _aiLastErr=/quota|exceeded|429|rate.?limit/i.test((e&&e.message)||"")?"quota":"error"; }
+    if(_aiLastErr==="quota") toast("AI daily limit reached — reading on the phone instead (less accurate)…","good");
   }
   const nm=await ocrNameMulti(ocrImg);
   return nm ? {name:nm, via:"ocr"} : null;
 }
+function _nameFailMsg(){
+  return _aiLastErr==="quota" ? "AI limit reached and the label wasn't clear enough to read on the phone — please type the name."
+       : "Couldn't read the name clearly — tap 🔤 Scan the name to try again, or type it.";
+}
 function fillReadName(res){
   const nm=res.name;
+  // A phone-only (non-AI) reading is a guess on logo-heavy packs — ask before filling it in.
+  if(res.via!=="ai" && !confirm((_aiLastErr==="quota"?"The AI's daily limit is used up, so I read the label on the phone.":"I read the label on the phone (no AI).")+"\n\nI think it says: \""+nm+"\"\n\nUse this name?")){ toast("OK — type the name instead","warn"); return; }
   $("#fName").value=nm; $("#fName").dispatchEvent(new Event("input")); $("#fName").dispatchEvent(new Event("blur"));
   // your category rules win; the AI's pick only fills in when no rule matches
   if(res.category && !catTouched && !autoCategoryStrict(nm) && CAT_ORDER.includes(res.category)){ setCatSelect(res.category); const t=$("#autoCatTag"); if(t) t.textContent=" → auto: "+res.category; }
@@ -3310,7 +3344,7 @@ async function identifyPhoto(dataUrl, thumb){
   try{
     const res=await readProductName(dataUrl, dataUrl);
     if(res && res.name) fillReadName(res);
-    else toast("Couldn't read a name — type it (photo kept)","warn");
+    else toast(_nameFailMsg(),"warn");
   }catch(e){ toast("Couldn't read the label — type the name (photo kept)","warn"); }
 }
 // Pick the most product-name-like line out of raw label OCR
@@ -3599,7 +3633,7 @@ $("#camShutter").addEventListener("click",async()=>{
     }
     if(grocExpiryId){ const _g=getItem(grocExpiryId); const _e=$("#fExp").value; if(_g){ _g.exp=_e||null; save(); renderAll(); } grocExpiryId=null; $("#fExp").value=""; toast(_e?("📅 Expiry set: "+_e):"No date read — you can add it later","good"); grocScanNext(); }
   }else if(camMode==="name"){
-    const shot=captureNameRegion(), full=captureDateRegionRaw(), thumb=toThumb(camVideo,420,0.62); closeCamera(); setTempPhoto(thumb); await readNameLive(shot, full);
+    const shot=captureNameRegion(), full=captureFrameForAI(), thumb=toThumb(camVideo,420,0.62); closeCamera(); setTempPhoto(thumb); await readNameLive(shot, full);
     if(chainDate && $("#fName").value.trim()){ chainDate=false; setTimeout(()=>{ if($("#itemScrim").classList.contains("on")) openCamera("date"); }, 600); }
   }else{
     if(!isAdmin()){ closeCamera(); toast("Only the admin can change photos","warn"); return; }
@@ -3612,7 +3646,7 @@ async function readNameLive(dataUrl, fullColor){
   try{
     const res=await readProductName(dataUrl, fullColor||dataUrl);
     if(res && res.name) fillReadName(res);
-    else toast(window.GEMINI?"Couldn't read it — try again a bit closer, or type it.":"Couldn't read it. Fancy logos are hard — for packaged items the barcode is more reliable, or just type it.","warn");
+    else toast(_nameFailMsg(),"warn");
   }catch(e){ toast("Couldn't read the label — type the name","warn"); }
 }
 
@@ -3652,6 +3686,11 @@ function captureDateRegionRaw(){
   return c.toDataURL("image/jpeg",0.9);
 }
 // Crop to the on-screen box and upscale — reads a framed product name far better than the whole glossy pack.
+function captureFrameForAI(){   // full colour frame, max 1024px — plenty for reading labels, and lighter on your AI quota
+  const v=camVideo, vw=v.videoWidth||1280, vh=v.videoHeight||720, sc=Math.min(1, 1024/Math.max(vw,vh));
+  const c=document.createElement("canvas"); c.width=Math.round(vw*sc); c.height=Math.round(vh*sc);
+  c.getContext("2d").drawImage(v,0,0,c.width,c.height); return c.toDataURL("image/jpeg",0.85);
+}
 function captureNameRegion(){
   const v=camVideo, vw=v.videoWidth||1280, vh=v.videoHeight||720;
   const bx=Math.round(vw*0.05), by=Math.round(vh*0.20), bw=Math.round(vw*0.90), bh=Math.round(vh*0.52);
