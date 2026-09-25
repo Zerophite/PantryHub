@@ -442,6 +442,7 @@ body.viewonly .vobadge{display:block}
         <button class="chip" id="chipPasteImg">📋 Paste image</button>
         <button class="chip" id="chipReadName">🔤 Scan the name</button>
         <button class="chip" id="chipPhoto">⬆️ Add your own photo</button>
+        <button class="chip" id="chipKeepPhoto" style="display:none">✅ Keep this photo</button>
       </div>
     </div>
     <div class="sub-hint">Scanning the barcode is the reliable way to auto-fill the name (looks it up in a food database). “Find image” searches by the name you typed. Or add your own photo.</div>
@@ -591,7 +592,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 85 · 2026-09-25</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 86 · 2026-09-25</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2077,6 +2078,7 @@ function itemCardHTML(it,mode,showCat,opts){
   if(mode!=="grocery" && it.opened && !agesFromPurchase(it)) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
   else if(mode!=="grocery" && !it.opened && !agesFromPurchase(it) && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">📂 Mark open</button>`);
   if(it.store && it.store!=="pantry") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
+  if(it.photoTemp && isAdmin()) sub.push(`<span class="pill warn" title="Temporary photo from a label scan — open the item to replace or keep it">📸 Temp photo</span>`);
 
   const barHTML=(it.percent!=null)?`<div class="bar ${pctClass(it.percent)}"><i style="width:${it.percent}%"></i></div>`:"";
   const pctInline = usesCount(it) ? "" : `<div class="pctchips">`+[5,10,25,50,75,100].map(p=>`<button type="button" data-pct="${p}" data-pid="${it.id}" class="${it.percent===p?'on':''}">${p}</button>`).join("")+`</div>`;
@@ -2458,7 +2460,7 @@ function openItemSheet(id){
   setRipe((it&&it.ripe)||"ripe"); updateRipeVisibility();
   updatePct();
   // photo
-  pendingPhoto=it?it.photo:null;
+  pendingPhoto=it?it.photo:null; pendingPhotoTemp=!!(it&&it.photoTemp);
   pendingBarcode=it?(it.barcode||null):null;
   $("#fBarcode").value=(it&&it.barcode)?it.barcode:"";
   showPhoto(pendingPhoto);
@@ -2472,7 +2474,7 @@ function openItemSheet(id){
   try{ $("#itemSheet").scrollTop=0; }catch(e){}
   requestAnimationFrame(()=>{ try{ $("#itemSheet").scrollTop=0; }catch(e){} });
 }
-function closeItemSheet(){ scanGen++; itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingBarcode=null; backupForId=null; chainDate=false; rapidMode=false; }
+function closeItemSheet(){ scanGen++; itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingPhotoTemp=false; pendingBarcode=null; backupForId=null; chainDate=false; rapidMode=false; }
 
 $("#fabAdd").addEventListener("click",()=>{
   if(!requireEdit()) return;
@@ -2620,7 +2622,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
     name, category:$("#fCat").value,
     percent: parseInt($("#fPct").value,10),
     qty:$("#fQty").value.trim(), count:Math.max(1,parseInt($("#fCntVal").textContent,10)||1), exp:$("#fExp").value||null, opened:$("#fOpen").value||null,
-    store:storeVal, vac:$("#fVac").checked, ripe:(($("#ripeField")&&$("#ripeField").style.display!=="none")?ripeVal:null), byCount:usesCountByName(name, editingId), note:titleCase($("#fNote").value.trim()), photo:pendingPhoto||null,
+    store:storeVal, vac:$("#fVac").checked, ripe:(($("#ripeField")&&$("#ripeField").style.display!=="none")?ripeVal:null), byCount:usesCountByName(name, editingId), note:titleCase($("#fNote").value.trim()), photo:pendingPhoto||null, photoTemp:!!(pendingPhotoTemp && pendingPhoto),
   };
   if(backupForId){
     const host=getItem(backupForId);
@@ -2654,10 +2656,11 @@ $("#btnSaveItem").addEventListener("click",()=>{
       if(!jobs.length) return;
       Promise.all(jobs).then(rs=>{ const okAll=rs.every(Boolean); if(okAll && bc) markPub(bc,data.name,data.category,!!ph); toast(okAll?(ph?"📤 Shared to everyone (name + image)":"📤 Shared to everyone"):"⚠️ Shared save failed — check the Firestore rule", okAll?"good":"warn"); });
     };
-    if(_realNow) _share(_realNow); else resolveItemPhoto(_id, bc, data.name).then(_share);
+    if(data.photoTemp){ (bc?window.Products.get(bc):Promise.resolve(null)).then(function(sp){ _share((sp&&sp.photo)||""); }).catch(function(){}); }   // share the name, keep the shared photo
+    else if(_realNow) _share(_realNow); else resolveItemPhoto(_id, bc, data.name).then(_share);
   }
   if(ensureCat(data.category)){ rebuildCats(); renderCatList(); }   // auto-create the category if it's new
-  { const _t = editingId ? getItem(editingId) : state.items[state.items.length-1]; if(_t && typeof _t.photo==="string" && _t.photo.startsWith("data:")){ setLocalPhoto(_t.id,_t.photo); if(_t.barcode) rememberBarcodePhoto(_t.barcode,_t.photo); rememberNamePhoto(_t.name,_t.photo); _t.photo="L"; } }
+  { const _t = editingId ? getItem(editingId) : state.items[state.items.length-1]; if(_t && typeof _t.photo==="string" && _t.photo.startsWith("data:")){ setLocalPhoto(_t.id,_t.photo); if(!_t.photoTemp){ if(_t.barcode) rememberBarcodePhoto(_t.barcode,_t.photo); rememberNamePhoto(_t.name,_t.photo); } _t.photo="L"; } }
   if(!editingId){ const _t3=state.items[state.items.length-1]; if(_t3 && !_t3.photo) applyRememberedPhoto(_t3); }   // re-adding something you had -> your old photo
   learnCat(data.name, data.category); lastCat=data.category;        // remember the user's own preference
   save(); renderAll(); closeItemSheet();
@@ -2706,6 +2709,7 @@ $("#btnSaveNote").addEventListener("click",()=>{
 /* ============================================================
    PHOTO / CAMERA  (barcode scan + date OCR + photo)
    ============================================================ */
+let pendingPhotoTemp=false;   // true = a temporary label snapshot (the admin can replace or keep it)
 let pendingPhoto=null;
 let pendingBarcode=null;
 let chainDate=false;   // after a barcode scan, auto-open the expiry-date scanner
@@ -2816,7 +2820,7 @@ function rememberBarcodePhoto(code,data,force){
 async function customPhotoForBarcode(code){
   if(!code) return null;
   const ok=function(p){ return typeof p==="string" && p.startsWith("data:"); };
-  const tw=state.items.find(function(i){ return i.barcode===code && i.photo==="L"; });
+  const tw=state.items.find(function(i){ return i.barcode===code && i.photo==="L" && !i.photoTemp; });
   let d=null;
   if(tw){ d=_photoMem[tw.id]||await idbGet(tw.id); if(ok(d)) return d; }
   d=await idbGet("bc:"+code); if(ok(d)) return d;
@@ -2838,7 +2842,7 @@ function rememberNamePhoto(name,data,force){
 }
 // Before an item is deleted, keep its photo in the pantry's shared memory so ANY member re-adding/rescanning it gets it back.
 function stashItemPhoto(it){
-  if(!it || it.photo!=="L") return;
+  if(!it || it.photo!=="L" || it.photoTemp) return;
   const go=function(d){ if(typeof d!=="string" || !d.startsWith("data:")) return; if(it.barcode) rememberBarcodePhoto(it.barcode,d,true); rememberNamePhoto(it.name,d,true); };
   if(_photoMem[it.id]) go(_photoMem[it.id]); else idbGet(it.id).then(function(d){ if(d) return go(d); if(window.Photos) window.Photos.get(it.id).then(go).catch(function(){}); });
 }
@@ -2853,8 +2857,8 @@ async function rememberedPhotoFor(code,name){
 function applyRememberedPhoto(it, code){
   code=code||(it&&it.barcode); if(!it || (!code && !it.name)) return;
   rememberedPhotoFor(code, it.name).then(function(d){
-    if(!d) return; const cur=getItem(it.id); if(!cur || cur.photo==="L") return;
-    setLocalPhoto(cur.id,d); cur.photo="L"; save(); renderAll();
+    if(!d) return; const cur=getItem(it.id); if(!cur || (cur.photo==="L" && !cur.photoTemp)) return;
+    setLocalPhoto(cur.id,d); cur.photo="L"; cur.photoTemp=false; save(); renderAll();
   });
 }
 // In the add/edit sheet: swap a stock web image for your remembered photo of this product.
@@ -2862,14 +2866,14 @@ function upgradePendingPhoto(code){
   if(!code) return;
   rememberedPhotoFor(code, ($("#fName")&&$("#fName").value)||"").then(function(d){
     if(!d || !itemScrim.classList.contains("on") || pendingBarcode!==code) return;
-    if(typeof pendingPhoto==="string" && pendingPhoto.startsWith("data:")) return;   // already a custom photo
-    pendingPhoto=d; showPhoto(d);
+    if(typeof pendingPhoto==="string" && pendingPhoto.startsWith("data:") && !pendingPhotoTemp) return;   // already a real custom photo
+    pendingPhoto=d; pendingPhotoTemp=false; showPhoto(d);
   });
 }
 var _bfAt=0;
 function backfillBarcodePhotos(){   // copy existing custom photos into the barcode + name memory (throttled)
   const now=Date.now(); if(now-_bfAt<60000) return; _bfAt=now;
-  (state.items||[]).forEach(function(it){ if(it.photo!=="L") return;
+  (state.items||[]).forEach(function(it){ if(it.photo!=="L" || it.photoTemp) return;
     const keys=[]; if(it.barcode) keys.push("bc:"+it.barcode); const nk=_nmKey(it.name); if(nk) keys.push("nm:"+nk);
     if(!keys.length) return;
     const put=function(d){ if(typeof d==="string" && d.startsWith("data:")) keys.forEach(function(k){ idbGet(k).then(function(x){ if(!x) idbPut(k,d); }); }); };
@@ -2895,8 +2899,8 @@ async function recoverPhotosFromBackup(json){
     if(it.barcode && !(await idbGet("bc:"+it.barcode))){ await idbPut("bc:"+it.barcode,d); if(canUp){ try{ await window.Photos.save(_bcPhotoCloudId(it.barcode),d); }catch(e){} } }
     const nk=_nmKey(it.name); if(nk && !(await idbGet("nm:"+nk))){ await idbPut("nm:"+nk,d); if(canUp){ try{ await window.Photos.save(_nmPhotoCloudId(it.name),d); }catch(e){} } }
     state.items.forEach(function(cur){
-      if(cur.photo==="L") return;                                             // keep photos you already have
-      if((it.barcode && cur.barcode===it.barcode) || (nk && _nmKey(cur.name)===nk)){ setLocalPhoto(cur.id,d); cur.photo="L"; applied++; }
+      if(cur.photo==="L" && !cur.photoTemp) return;                          // keep real photos you already have
+      if((it.barcode && cur.barcode===it.barcode) || (nk && _nmKey(cur.name)===nk)){ setLocalPhoto(cur.id,d); cur.photo="L"; cur.photoTemp=false; applied++; }
     });
   }
   if(applied){ save(); renderAll(); }
@@ -2915,9 +2919,9 @@ function resolveItemPhoto(id, bc, name){
 }
 function showPhoto(url){
   const pv=$("#photoPreview"), hint=$("#photoHint");
-  const show=u=>{ pv.src=u; pv.style.display="block"; hint.textContent=isAdmin()?"Tap “Add photo” to replace":""; };
+  const show=u=>{ pv.src=u; pv.style.display="block"; hint.textContent=pendingPhotoTemp?"📸 Temporary photo from the label — the admin can replace it":(isAdmin()?"Tap “Add photo” to replace":""); const kp=$("#chipKeepPhoto"); if(kp) kp.style.display=(pendingPhotoTemp&&isAdmin())?"":"none"; };
   if(typeof url==="string" && (url.startsWith("data:")||url.startsWith("http"))){ show(url); return; }
-  pv.style.display="none"; pv.removeAttribute("src"); hint.textContent="🖼️ No photo yet";
+  pv.style.display="none"; pv.removeAttribute("src"); hint.textContent="🖼️ No photo yet"; { const kp=$("#chipKeepPhoto"); if(kp) kp.style.display="none"; }
   if(url==="L"){ hint.textContent="Loading photo…";
     resolveItemPhoto(editingId, pendingBarcode, ($("#fName")&&$("#fName").value)||"").then(p=>{ if(p){ pendingPhoto=p; show(p); } else hint.textContent="🖼️ No photo yet"; });
   }
@@ -2938,6 +2942,7 @@ function toThumb(imgOrCanvas,max=360,q=0.62){
 const fileInput=document.createElement("input");
 fileInput.type="file"; fileInput.accept="image/*"; fileInput.capture="environment"; fileInput.style.display="none";
 document.body.appendChild(fileInput);
+$("#chipKeepPhoto") && $("#chipKeepPhoto").addEventListener("click",()=>{ if(!isAdmin()) return; pendingPhotoTemp=false; showPhoto(pendingPhoto); toast("✅ Photo kept — Save to use it for this product from now on","good"); });
 $("#chipPhoto").addEventListener("click",()=>{ if(!isAdmin()){ toast("Only the admin can change photos","warn"); return; } photoMode="photo"; fileInput.click(); });
 $("#chipReadName").addEventListener("click",()=>{ openCamera("name"); });
 let photoMode="photo";
@@ -2945,8 +2950,8 @@ fileInput.addEventListener("change",()=>{
   const f=fileInput.files[0]; if(!f) return;
   const img=new Image();
   img.onload=()=>{
-    if(photoMode==="identify"){ identifyPhoto(toThumb(img,720,0.78)); }
-    else { if(!isAdmin()){ toast("Only the admin can change photos","warn"); return; } pendingPhoto=toThumb(img); showPhoto(pendingPhoto); toast("Photo added","good"); }
+    if(photoMode==="identify"){ identifyPhoto(toThumb(img,1024,0.82), toThumb(img)); }
+    else { if(!isAdmin()){ toast("Only the admin can change photos","warn"); return; } pendingPhoto=toThumb(img); pendingPhotoTemp=false; showPhoto(pendingPhoto); toast("Photo added","good"); }
   };
   img.src=URL.createObjectURL(f);
   fileInput.value="";
@@ -2962,7 +2967,7 @@ async function openCamera(mode){
   $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":mode==="name"?"PRODUCT NAME":"PHOTO";
   $("#camHint").textContent = mode==="barcode"?"Fill the box with the barcode • for round jars keep it centred & flat-on":
     mode==="date"?"Frame the printed date inside the box, hold steady, then tap the shutter":
-    mode==="name"?"Frame the product NAME inside the box, hold steady, then tap the shutter":"Tap to capture";
+    mode==="name"?(window.GEMINI?"Point at the front of the product, hold steady, then tap the shutter":"Frame the product NAME inside the box, hold steady, then tap the shutter"):"Tap to capture";
   $("#camHint").classList.remove("scanning");
   $("#camScanBox").style.display = mode==="photo"?"none":"block";
   { const sk=$("#camSkipDate"); if(sk) sk.style.display = (mode==="date")?"block":"none"; }
@@ -3114,7 +3119,7 @@ $("#chipPasteImg").addEventListener("click",async()=>{
     for(const it of items){
       const type=(it.types||[]).find(t=>t.startsWith("image/"));
       if(type){ const blob=await it.getType(type); const url=URL.createObjectURL(blob);
-        openCropper(url,(d)=>{ pendingPhoto=d; showPhoto(pendingPhoto); toast("Photo set — tap Save to keep it","good"); });
+        openCropper(url,(d)=>{ pendingPhoto=d; pendingPhotoTemp=false; showPhoto(pendingPhoto); toast("Photo set — tap Save to keep it","good"); });
         return; }
     }
     toast("No image on the clipboard — copy an image first (long-press → Copy)","warn");
@@ -3206,8 +3211,87 @@ function loadZXing(){
 // coverage); USDA FoodData Central "Branded Foods" as fallback (the US database Cronometer
 // draws from — much better for US store brands like Great Value).
 // ----- Identify an item from a photo: try a barcode in the shot, else read the label text -----
-async function identifyPhoto(dataUrl){
-  pendingPhoto=dataUrl; showPhoto(pendingPhoto);
+/* ===== Reading a product NAME from a photo: AI vision first (reads logos), smarter on-device text reading as backup ===== */
+let _aiNameOff=false;   // set when the AI Worker hasn't been upgraded for names yet (falls back to on-device reading)
+async function aiReadName(dataUrl){
+  if(!window.GEMINI || _aiNameOff || !dataUrl) return null;
+  const b64=dataUrl.split(",")[1], mime=dataUrl.slice(5, dataUrl.indexOf(";"));
+  const r=await fetchT(window.GEMINI_PROXY,{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({task:"name",b64:b64,mime:mime,cats:(CAT_ORDER||[]).filter(function(c){ return c!=="Other"; })})},20000);
+  const raw=await r.text(); let j={}; try{ j=JSON.parse(raw); }catch(e){}
+  if(!j || !("name" in j)){ _aiNameOff=true; return null; }          // old date-only Worker -> use on-device reading
+  if(!j.name){ if(j.error) throw new Error(String(j.error).slice(0,140)); return null; }
+  return {name:String(j.name).replace(/\s+/g," ").trim(), category:j.category||null};
+}
+function _fixOcrWord(w){ const L=(w.match(/[A-Za-z]/g)||[]).length; if(L < w.length*0.6) return w; return w.replace(/0/g,"O").replace(/1/g,"I").replace(/5/g,"S").replace(/8/g,"B").replace(/\|/g,"I"); }
+function fixOcrText(t){ return (t||"").split("\n").map(function(l){ return l.split(/\s+/).map(_fixOcrWord).join(" "); }).join("\n"); }
+let _ocrVocab=null, _ocrVocabAt=0;
+function ocrVocab(){   // words the app already knows: your items, remembered products, brands, food words
+  if(_ocrVocab && Date.now()-_ocrVocabAt<60000) return _ocrVocab;
+  const v=new Set(); const add=function(x){ normName(x).split(" ").forEach(function(w){ if(w.length>=4 && !/\d/.test(w)) v.add(w); }); };
+  (state.items||[]).forEach(function(i){ add(i.name); });
+  try{ const p=getProducts(); Object.keys(p).forEach(function(k){ if(p[k] && p[k].name) add(p[k].name); }); }catch(e){}
+  try{ _BRAND_WORDS.forEach(function(w){ if(w.length>=4) v.add(w); }); }catch(e){}
+  try{ CAT_RULES.forEach(function(r){ r[0].forEach(add); }); }catch(e){}
+  _ocrVocab=v; _ocrVocabAt=Date.now(); return v;
+}
+function _lev(a,b){ if(a===b) return 0; const m=a.length,n=b.length; if(Math.abs(m-n)>2) return 9; let p=[]; for(let j=0;j<=n;j++) p[j]=j; for(let i=1;i<=m;i++){ const c=[i]; for(let j=1;j<=n;j++){ c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1)); } p=c; } return p[n]; }
+function correctWithVocab(name){   // snap misread words to the closest known word ("KIKKOHAN" -> "kikkoman")
+  const V=ocrVocab(); let hits=0, words=0;
+  const out=(name||"").split(" ").map(function(w){
+    const lw=w.toLowerCase(); if(lw.length<4) return w; words++;
+    if(V.has(lw)){ hits++; return w; }
+    if(lw.length<5) return w;                       // short words are too easy to mis-snap (real -> meal)
+    const tol=lw.length>=8?2:1; let best=null, bd=9;
+    V.forEach(function(v){ if(Math.abs(v.length-lw.length)>tol) return; const d=_lev(lw,v); if(d<bd){ bd=d; best=v; } });
+    if(best && bd<=tol){ hits++; return best; }
+    return w;
+  });
+  return {name:titleCase(out.join(" ").toLowerCase()), score:words?hits/words:0};
+}
+function invertDataUrl(u){ return new Promise(function(res){ const im=new Image(); im.onload=function(){ try{ const c=document.createElement("canvas"); c.width=im.naturalWidth; c.height=im.naturalHeight; const x=c.getContext("2d"); x.drawImage(im,0,0); const d=x.getImageData(0,0,c.width,c.height), D=d.data; for(let i=0;i<D.length;i+=4){ D[i]=255-D[i]; D[i+1]=255-D[i+1]; D[i+2]=255-D[i+2]; } x.putImageData(d,0,0); res(c.toDataURL("image/jpeg",0.9)); }catch(e){ res(null); } }; im.onerror=function(){ res(null); }; im.src=u; }); }
+async function ocrNameMulti(img){   // several passes: normal, sparse text (logos), light-on-dark; keep the most "known" result
+  const worker=await getNameOcrWorker(); let best=null;
+  const pass=async function(src,psm){ try{ await worker.setParameters({tessedit_pageseg_mode:psm}); const r=await worker.recognize(src); return (r&&r.data&&r.data.text)||""; }catch(e){ return ""; } };
+  const consider=function(text){ const g=guessNameFromLabel(fixOcrText(text)); if(!g) return; const c=correctWithVocab(g); if(!best || c.score>best.score || (c.score===best.score && c.name.length>best.name.length)) best=c; };
+  consider(await pass(img,"3"));  if(best && best.score>=0.5){ try{ await worker.setParameters({tessedit_pageseg_mode:"3"}); }catch(e){} return best.name; }
+  consider(await pass(img,"11")); if(best && best.score>=0.5){ try{ await worker.setParameters({tessedit_pageseg_mode:"3"}); }catch(e){} return best.name; }
+  const inv=await invertDataUrl(img); if(inv) consider(await pass(inv,"11"));
+  try{ await worker.setParameters({tessedit_pageseg_mode:"3"}); }catch(e){}
+  return best ? best.name : null;
+}
+async function readProductName(ocrImg, aiImg){
+  if(window.GEMINI && !_aiNameOff){
+    try{ const a=await aiReadName(aiImg||ocrImg); if(a && a.name) return {name:a.name, category:a.category, via:"ai"}; }
+    catch(e){ /* AI out of quota / offline -> on-device reading */ }
+  }
+  const nm=await ocrNameMulti(ocrImg);
+  return nm ? {name:nm, via:"ocr"} : null;
+}
+function fillReadName(res){
+  const nm=res.name;
+  $("#fName").value=nm; $("#fName").dispatchEvent(new Event("input")); $("#fName").dispatchEvent(new Event("blur"));
+  // your category rules win; the AI's pick only fills in when no rule matches
+  if(res.category && !catTouched && !autoCategoryStrict(nm) && CAT_ORDER.includes(res.category)){ setCatSelect(res.category); const t=$("#autoCatTag"); if(t) t.textContent=" → auto: "+res.category; }
+  upgradePhotoByName();
+  toast((res.via==="ai"?"✨ ":"✓ ")+'Read: "'+nm+'" — fix any mistakes',"good");
+}
+// Keep a snapshot as a TEMPORARY photo (only when there's no photo yet). The admin can replace or keep it.
+function setTempPhoto(d){
+  if(!d || !itemScrim.classList.contains("on") || pendingPhoto) return;
+  pendingPhoto=d; pendingPhotoTemp=true; showPhoto(d);
+}
+// After a name is read: if the admin already has a photo for this product, use it instead of a temporary one.
+function upgradePhotoByName(){
+  const nm=($("#fName")&&$("#fName").value)||"";
+  rememberedPhotoFor(pendingBarcode, nm).then(function(d){
+    if(!d || !itemScrim.classList.contains("on")) return;
+    if(typeof pendingPhoto==="string" && pendingPhoto.startsWith("data:") && !pendingPhotoTemp) return;   // keep a real photo
+    pendingPhoto=d; pendingPhotoTemp=false; showPhoto(d);
+  });
+}
+async function identifyPhoto(dataUrl, thumb){
+  setTempPhoto(thumb||dataUrl);
   toast("🔎 Identifying…","good");
   // 1) is there a barcode visible in the shot? (most accurate)
   try{
@@ -3217,24 +3301,12 @@ async function identifyPhoto(dataUrl){
     const code=res && (res.getText?res.getText():res.text);
     if(code){ lookupBarcode(code); return; }
   }catch(e){ /* no barcode — read the label instead */ }
-  // 2) OCR the label and pull out the most name-like line
+  // 2) read the product name (AI vision first, then on-device)
   try{
-    await loadTesseract();
-    let worker=null, text="";
-    try{ worker=await Tesseract.createWorker("eng"); }catch(e){}
-    try{
-      if(worker){ const r=await worker.recognize(dataUrl); text=r.data.text||""; }
-      else { const r=await Tesseract.recognize(dataUrl,"eng"); text=r.data.text||""; }
-    }catch(e){}
-    if(worker){ try{ await worker.terminate(); }catch(e){} }
-    const name=guessNameFromLabel(text);
-    if(name){
-      $("#fName").value=name; $("#fName").dispatchEvent(new Event("input")); $("#fName").dispatchEvent(new Event("blur"));
-      toast('✓ Read: "'+name+'" — edit if needed',"good");
-    }else{
-      toast("Couldn't read a name — type it (photo saved)","warn");
-    }
-  }catch(e){ toast("Couldn't read the label — type the name (photo saved)","warn"); }
+    const res=await readProductName(dataUrl, dataUrl);
+    if(res && res.name) fillReadName(res);
+    else toast("Couldn't read a name — type it (photo kept)","warn");
+  }catch(e){ toast("Couldn't read the label — type the name (photo kept)","warn"); }
 }
 // Pick the most product-name-like line out of raw label OCR
 function guessNameFromLabel(raw){
@@ -3443,10 +3515,10 @@ async function lookupBarcode(code){
   }catch(e){}
   if(myGen!==scanGen) return;
   const bf=$("#fBarcode"); if(bf && !bf.value.trim()) bf.value=code;   // fill the scanned number automatically
-  toast(isAdmin()?"Not in the database — its barcode is filled in. Type the name + add a photo, then Save to share it.":"Not in the database — its barcode is filled in. Type the name (and add a photo) and Save; I'll remember it.","warn");
+  toast(isAdmin()?"Not in the database — its barcode is filled in. Type the name + add a photo, then Save to share it.":"Not in the database — its barcode is filled in. Snap the front of the product and I'll read its name.","warn");
   rapidMode=false;   // this item needs attention — stop the hands-free loop
   setTimeout(()=>{ if(!$("#itemScrim").classList.contains("on")) return;
-    if(confirm("Couldn't find this item in the databases.\n\nTake a photo of the front label so I can read its name for you?\n\n(Or press Cancel and type the name yourself.)")){ photoMode="identify"; fileInput.click(); }
+    if(confirm("Couldn't find this item in the databases.\n\nTake a photo of the front of the product? I'll read its name and use it as the item's photo for now.\n\n(Or press Cancel and type the name yourself.)")){ photoMode="identify"; fileInput.click(); }
   }, 250);
 }
 // Fill the add-item form from a barcode result
@@ -3461,7 +3533,7 @@ function applyBarcodeResult(nm, catGuess, imgUrl){
   else cat=autoCategory(nm);
   $("#fCat").value=CAT_ORDER.includes(cat)?cat:"Other";
   $("#autoCatTag").textContent=" → auto: "+$("#fCat").value;
-  if(imgUrl){ pendingPhoto=imgUrl; showPhoto(pendingPhoto); }
+  if(imgUrl){ pendingPhoto=imgUrl; pendingPhotoTemp=false; showPhoto(pendingPhoto); }
   upgradePendingPhoto(pendingBarcode);
   updateFreshInfo();
   toast("✓ Detected: "+nm,"good");
@@ -3522,21 +3594,19 @@ $("#camShutter").addEventListener("click",async()=>{
     }
     if(grocExpiryId){ const _g=getItem(grocExpiryId); const _e=$("#fExp").value; if(_g){ _g.exp=_e||null; save(); renderAll(); } grocExpiryId=null; $("#fExp").value=""; toast(_e?("📅 Expiry set: "+_e):"No date read — you can add it later","good"); grocScanNext(); }
   }else if(camMode==="name"){
-    const shot=captureNameRegion(); closeCamera(); await readNameLive(shot);
+    const shot=captureNameRegion(), full=captureDateRegionRaw(), thumb=toThumb(camVideo,420,0.62); closeCamera(); setTempPhoto(thumb); await readNameLive(shot, full);
   }else{
     if(!isAdmin()){ closeCamera(); toast("Only the admin can change photos","warn"); return; }
-    pendingPhoto=toThumb(camVideo,420,0.62); closeCamera(); showPhoto(pendingPhoto); toast("Photo captured","good");
+    pendingPhoto=toThumb(camVideo,420,0.62); pendingPhotoTemp=false; closeCamera(); showPhoto(pendingPhoto); toast("Photo captured","good");
   }
 });
 // Read a product name from a live camera frame (on-device OCR) and drop it into the name field.
-async function readNameLive(dataUrl){
+async function readNameLive(dataUrl, fullColor){
   toast("🔎 Reading name…","good");
   try{
-    const worker=await getNameOcrWorker();
-    const r=await worker.recognize(dataUrl);
-    const nm=guessNameFromLabel((r&&r.data&&r.data.text)||"");
-    if(nm){ $("#fName").value=nm; $("#fName").dispatchEvent(new Event("input")); $("#fName").dispatchEvent(new Event("blur")); toast('✓ Read: "'+nm+'" — fix any mistakes',"good"); }
-    else toast("Couldn't read it. Fancy logos are hard — for packaged items the barcode is more reliable, or just type it.","warn");
+    const res=await readProductName(dataUrl, fullColor||dataUrl);
+    if(res && res.name) fillReadName(res);
+    else toast(window.GEMINI?"Couldn't read it — try again a bit closer, or type it.":"Couldn't read it. Fancy logos are hard — for packaged items the barcode is more reliable, or just type it.","warn");
   }catch(e){ toast("Couldn't read the label — type the name","warn"); }
 }
 
