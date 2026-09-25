@@ -592,7 +592,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 86 · 2026-09-25</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 87 · 2026-09-25</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -3212,14 +3212,15 @@ function loadZXing(){
 // draws from — much better for US store brands like Great Value).
 // ----- Identify an item from a photo: try a barcode in the shot, else read the label text -----
 /* ===== Reading a product NAME from a photo: AI vision first (reads logos), smarter on-device text reading as backup ===== */
-let _aiNameOff=false;   // set when the AI Worker hasn't been upgraded for names yet (falls back to on-device reading)
+let _aiNameOffAt=0;   // when the AI Worker last answered without name support (re-checked after 10 minutes)
+function _aiNameOff(){ return _aiNameOffAt && (Date.now()-_aiNameOffAt < 600000); }
 async function aiReadName(dataUrl){
-  if(!window.GEMINI || _aiNameOff || !dataUrl) return null;
+  if(!window.GEMINI || _aiNameOff() || !dataUrl) return null;
   const b64=dataUrl.split(",")[1], mime=dataUrl.slice(5, dataUrl.indexOf(";"));
   const r=await fetchT(window.GEMINI_PROXY,{method:"POST",headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({task:"name",b64:b64,mime:mime,cats:(CAT_ORDER||[]).filter(function(c){ return c!=="Other"; })})},20000);
+    body:JSON.stringify({task:"name",b64:b64,mime:mime,maxTokens:2048,cats:(CAT_ORDER||[]).filter(function(c){ return c!=="Other"; })})},25000);
   const raw=await r.text(); let j={}; try{ j=JSON.parse(raw); }catch(e){}
-  if(!j || !("name" in j)){ _aiNameOff=true; return null; }          // old date-only Worker -> use on-device reading
+  if(!j || !("name" in j)){ _aiNameOffAt=Date.now(); return null; }   // old date-only Worker -> use on-device reading
   if(!j.name){ if(j.error) throw new Error(String(j.error).slice(0,140)); return null; }
   return {name:String(j.name).replace(/\s+/g," ").trim(), category:j.category||null};
 }
@@ -3261,8 +3262,12 @@ async function ocrNameMulti(img){   // several passes: normal, sparse text (logo
   return best ? best.name : null;
 }
 async function readProductName(ocrImg, aiImg){
-  if(window.GEMINI && !_aiNameOff){
-    try{ const a=await aiReadName(aiImg||ocrImg); if(a && a.name) return {name:a.name, category:a.category, via:"ai"}; }
+  if(window.GEMINI && !_aiNameOff()){
+    try{
+      let a=await aiReadName(aiImg||ocrImg);
+      if(!(a && a.name) && !_aiNameOff()){ toast("🔎 Looking closer…","good"); a=await aiReadName(aiImg||ocrImg); }   // one retry: the AI occasionally comes back empty
+      if(a && a.name) return {name:a.name, category:a.category, via:"ai"};
+    }
     catch(e){ /* AI out of quota / offline -> on-device reading */ }
   }
   const nm=await ocrNameMulti(ocrImg);
@@ -3518,7 +3523,7 @@ async function lookupBarcode(code){
   toast(isAdmin()?"Not in the database — its barcode is filled in. Type the name + add a photo, then Save to share it.":"Not in the database — its barcode is filled in. Snap the front of the product and I'll read its name.","warn");
   rapidMode=false;   // this item needs attention — stop the hands-free loop
   setTimeout(()=>{ if(!$("#itemScrim").classList.contains("on")) return;
-    if(confirm("Couldn't find this item in the databases.\n\nTake a photo of the front of the product? I'll read its name and use it as the item's photo for now.\n\n(Or press Cancel and type the name yourself.)")){ photoMode="identify"; fileInput.click(); }
+    if(confirm("Couldn't find this item in the databases.\n\nTap OK and point the camera at the front of the product. I'll read its name and keep the picture as the item's photo for now.\n\n(Or press Cancel and type the name yourself.)")){ openCamera("name"); }
   }, 250);
 }
 // Fill the add-item form from a barcode result
@@ -3595,6 +3600,7 @@ $("#camShutter").addEventListener("click",async()=>{
     if(grocExpiryId){ const _g=getItem(grocExpiryId); const _e=$("#fExp").value; if(_g){ _g.exp=_e||null; save(); renderAll(); } grocExpiryId=null; $("#fExp").value=""; toast(_e?("📅 Expiry set: "+_e):"No date read — you can add it later","good"); grocScanNext(); }
   }else if(camMode==="name"){
     const shot=captureNameRegion(), full=captureDateRegionRaw(), thumb=toThumb(camVideo,420,0.62); closeCamera(); setTempPhoto(thumb); await readNameLive(shot, full);
+    if(chainDate && $("#fName").value.trim()){ chainDate=false; setTimeout(()=>{ if($("#itemScrim").classList.contains("on")) openCamera("date"); }, 600); }
   }else{
     if(!isAdmin()){ closeCamera(); toast("Only the admin can change photos","warn"); return; }
     pendingPhoto=toThumb(camVideo,420,0.62); pendingPhotoTemp=false; closeCamera(); showPhoto(pendingPhoto); toast("Photo captured","good");
