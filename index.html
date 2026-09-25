@@ -591,7 +591,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 80 · 2026-09-18</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 83 · 2026-09-25</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -641,6 +641,7 @@ body.viewonly .vobadge{display:block}
         <button class="btn sec" id="btnExport">⬇️ Export backup</button>
         <button class="btn sec" id="btnImport">⬆️ Import backup</button>
       </div>
+      <button class="btn ghost" id="btnRecoverPhotos" style="margin-top:8px" title="Brings back photos of items you deleted. Photos only — your items are not changed.">♻️ Recover photos from a backup</button>
       <button class="btn ghost" id="btnRestoreSnap" style="display:none;margin-top:8px">↩︎ Undo last import / restore previous data</button>
       <div class="sub-hint" id="snapHint" style="display:none;margin:6px 0 0"></div>
     </div>
@@ -807,7 +808,7 @@ const DEFAULT_CATS=[
   ["Protein","🥩"],["Fruit/Veggies","🥬"],["Dairy/Non-Dairy","🥛"],["Baking","🧁"],
   ["Seasonings","🌿"],["Cooking Spices","🧂"],["Sauces/Oils","🫙"],
   ["Condiments","🥫"],["Canned/Soup","🍲"],["Pasta/Grains/Noodles","🍜"],
-  ["Frozen","🧊"],["Dried","🍂"],["Beverages","🥤"],
+  ["Dried","🍂"],["Beverages","🥤"],
   ["Supplements","💊"],["Other","📦"]
 ];
 // Reverse of the bad round-15 auto-migration: map the granular names back to your original categories.
@@ -816,7 +817,7 @@ const REV_CAT={
   "Meat":"Protein","Poultry":"Protein","Seafood":"Protein","Eggs":"Protein",
   "Dairy":"Dairy/Non-Dairy",
   "Vegetables":"Fruit/Veggies","Fruits":"Fruit/Veggies",
-  "Frozen Vegetables":"Frozen","Frozen Fruits":"Frozen","Frozen Foods":"Frozen","Frozen":"Frozen",
+  "Frozen Vegetables":"Snacks","Frozen Fruits":"Snacks","Frozen Foods":"Snacks","Frozen":"Snacks",
   "Canned":"Canned/Soup","Jarred":"Condiments",
   "Sauces":"Sauces/Oils","Liquid Seasonings":"Sauces/Oils","Oils":"Sauces/Oils",
   "Condiments":"Condiments","Spices":"Cooking Spices","Seasonings":"Seasonings",
@@ -866,6 +867,15 @@ function restoreOldCats(){
   if(touched) _migratedThisLoad=true;
   return touched;
 }
+function dropFrozenCat(){
+  if(state.noFrozenCat) return false;
+  let touched=false;
+  (state.items||[]).forEach(function(it){ if(it.category==="Frozen"){ it.category=(autoCategoryStrict(it.name)||"Snacks"); if(it.category==="Frozen") it.category="Snacks"; touched=true; } });
+  if(state.cats && state.cats.length){ const _n=state.cats.length; state.cats=state.cats.filter(function(c){ return c.name!=="Frozen"; }); if(state.cats.length!==_n) touched=true; }
+  state.noFrozenCat=1;
+  if(touched) _migratedThisLoad=true;
+  return touched;
+}
 function rebuildCats(){
   restoreOldCats();     // ONE-TIME fix of the bad auto-move (idempotent via state.catsV)
   if(!state.cats || !state.cats.length){
@@ -873,6 +883,7 @@ function rebuildCats(){
     // the offline single-device app keeps the full starter set.
     state.cats = CLOUD ? [{name:"Other",icon:"📦"}] : DEFAULT_CATS.map(([name,icon])=>({name,icon}));
   }
+  dropFrozenCat();      // remove the unused "Frozen" category (freezer is a storage spot, not a category)
   syncCatsFromItems();  // categories then grow automatically from whatever items the user adds
   CAT_ORDER=state.cats.map(c=>c.name);
   CAT_ICON=Object.fromEntries(state.cats.map(c=>[c.name,c.icon]));
@@ -1382,7 +1393,7 @@ function itemThumb(it){
 // keyword -> category (first match wins; broad-word overrides listed first)
 const CAT_RULES=[
   // --- overrides: stop broad words (chicken/beef/fish/potato/cream/orange) stealing the match ---
-  [["ice cream","gelato","sorbet","popsicle","frozen yogurt","frozen meal","frozen dinner","frozen pizza","frozen waffle"],"Frozen"],
+  [["ice cream","gelato","sorbet","popsicle","frozen yogurt","frozen meal","frozen dinner","frozen pizza","frozen waffle"],"Snacks"],
   [["bouillon","stock cube","beef cube","pork cube","chicken cube","maggi cube","knorr cube"],"Spices & Seasonings"],
   [["chicken stock","beef stock","vegetable stock","fish stock","chicken broth","beef broth","bone broth"],"Canned & Jarred"],
   [["fish sauce"],"Oils, Vinegars & Condiments"],
@@ -1793,7 +1804,7 @@ function seedGroceryV1(){
     ["Chicken Wings","Protein"],["Filipino Hotdog","Protein"],["Pork Chops","Protein"],
     ["Chicken Stock","Canned/Soup"],
     ["Toasted Sesame Seeds","Cooking Spices"],["Baking Soda","Cooking Spices"],
-    ["Dahon Ng Sili","Frozen"],
+    ["Dahon Ng Sili","Fruit/Veggies"],
     ["Maggi Seasoning Ginisa","Other"],["Salted Egg","Other"],
     ["Bok Choy","Fruit/Veggies"],["Broccoli","Fruit/Veggies"],["Carrots","Fruit/Veggies","2 of them"],
     ["Kalabasa","Fruit/Veggies"],["Kangkong (Water Crest)","Fruit/Veggies"],["Malunggay","Fruit/Veggies"],
@@ -1827,7 +1838,7 @@ let _photoUp=null;
 function photoUpSet(){ if(_photoUp) return _photoUp; try{ _photoUp=new Set(JSON.parse(localStorage.getItem("pantry_photo_up")||"[]")); }catch(e){ _photoUp=new Set(); } return _photoUp; }
 function markPhotoUp(id){ const st=photoUpSet(); if(!st.has(id)){ st.add(id); try{ localStorage.setItem("pantry_photo_up", JSON.stringify([...st])); }catch(e){} } }
 function ensureCloudPhoto(id,data,force){ if(!id||!data||!window.Photos) return; if(typeof canEdit==="function" && !canEdit()) return; if(!force && photoUpSet().has(id)) return; window.Photos.save(id,data).then(ok=>{ if(ok) markPhotoUp(id); }); }
-function hydratePhotos(){ try{ document.querySelectorAll("img.lazyphoto").forEach(img=>{ if(img.dataset.done) return; const id=img.dataset.pid;
+function hydratePhotos(){ try{ backfillBarcodePhotos(); }catch(e){} try{ document.querySelectorAll("img.lazyphoto").forEach(img=>{ if(img.dataset.done) return; const id=img.dataset.pid;
   if(_photoMem[id]){ img.src=_photoMem[id]; img.dataset.done="1"; return; }
   const bc=img.dataset.bc, nmv=img.dataset.nm||"";
   const done=()=>{ img.dataset.done="1"; };
@@ -2645,7 +2656,8 @@ $("#btnSaveItem").addEventListener("click",()=>{
     if(_realNow) _share(_realNow); else resolveItemPhoto(_id, bc, data.name).then(_share);
   }
   if(ensureCat(data.category)){ rebuildCats(); renderCatList(); }   // auto-create the category if it's new
-  { const _t = editingId ? getItem(editingId) : state.items[state.items.length-1]; if(_t && typeof _t.photo==="string" && _t.photo.startsWith("data:")){ setLocalPhoto(_t.id,_t.photo); _t.photo="L"; } }
+  { const _t = editingId ? getItem(editingId) : state.items[state.items.length-1]; if(_t && typeof _t.photo==="string" && _t.photo.startsWith("data:")){ setLocalPhoto(_t.id,_t.photo); if(_t.barcode) rememberBarcodePhoto(_t.barcode,_t.photo); rememberNamePhoto(_t.name,_t.photo); _t.photo="L"; } }
+  if(!editingId){ const _t3=state.items[state.items.length-1]; if(_t3 && !_t3.photo) applyRememberedPhoto(_t3); }   // re-adding something you had -> your old photo
   learnCat(data.name, data.category); lastCat=data.category;        // remember the user's own preference
   save(); renderAll(); closeItemSheet();
 });
@@ -2787,6 +2799,89 @@ function rememberProduct(code, info){
   if(typeof i2.photo==="string" && i2.photo.startsWith("data:")) delete i2.photo;   // never fill localStorage with base64
   o[code]=Object.assign({}, o[code], i2, {ts:Date.now()});
   try{ localStorage.setItem(PRODUCTS_KEY, JSON.stringify(o)); }catch(e){}
+}
+// Remember YOUR custom photo per barcode, so rescanning/restocking the same product reuses it —
+// even after the old item was used up and deleted. Kept in IndexedDB + this pantry's cloud copy.
+function _bcPhotoCloudId(code){ return "bc_"+String(window.CURRENT_PANTRY||"local").replace(/[^A-Za-z0-9_-]/g,"")+"_"+String(code).replace(/[^A-Za-z0-9_-]/g,""); }
+function rememberBarcodePhoto(code,data){
+  if(!code || typeof data!=="string" || !data.startsWith("data:")) return;
+  idbGet("bc:"+code).then(function(prev){
+    if(prev===data) return;
+    idbPut("bc:"+code,data);
+    if(window.Photos && (typeof canEdit!=="function" || canEdit())) window.Photos.save(_bcPhotoCloudId(code),data).catch(function(){});
+  });
+}
+async function customPhotoForBarcode(code){
+  if(!code) return null;
+  const ok=function(p){ return typeof p==="string" && p.startsWith("data:"); };
+  const tw=state.items.find(function(i){ return i.barcode===code && i.photo==="L"; });
+  let d=null;
+  if(tw){ d=_photoMem[tw.id]||await idbGet(tw.id); if(ok(d)) return d; }
+  d=await idbGet("bc:"+code); if(ok(d)) return d;
+  if(window.Photos){ try{ d=await window.Photos.get(_bcPhotoCloudId(code)); if(ok(d)){ idbPut("bc:"+code,d); return d; } }catch(e){} }
+  if(window.Products){ try{ const sp=await window.Products.get(code); if(sp && ok(sp.photo)) return sp.photo; }catch(e){} }
+  return null;
+}
+// Photo memory by product NAME too (items without a barcode, e.g. "Banana", "Eggs").
+function _nmKey(name){ return normName(name||""); }
+function rememberNamePhoto(name,data){ const k=_nmKey(name); if(!k || typeof data!=="string" || !data.startsWith("data:")) return; idbPut("nm:"+k,data); }
+async function rememberedPhotoFor(code,name){
+  const ok=function(p){ return typeof p==="string" && p.startsWith("data:"); };
+  let d=code?await customPhotoForBarcode(code):null; if(ok(d)) return d;
+  const k=_nmKey(name); if(k){ d=await idbGet("nm:"+k); if(ok(d)) return d; }
+  return null;
+}
+// Give an item your remembered photo (by barcode, then by name). Never replaces a custom photo it already has.
+function applyRememberedPhoto(it, code){
+  code=code||(it&&it.barcode); if(!it || (!code && !it.name)) return;
+  rememberedPhotoFor(code, it.name).then(function(d){
+    if(!d) return; const cur=getItem(it.id); if(!cur || cur.photo==="L") return;
+    setLocalPhoto(cur.id,d); cur.photo="L"; save(); renderAll();
+  });
+}
+// In the add/edit sheet: swap a stock web image for your remembered photo of this product.
+function upgradePendingPhoto(code){
+  if(!code) return;
+  rememberedPhotoFor(code, ($("#fName")&&$("#fName").value)||"").then(function(d){
+    if(!d || !itemScrim.classList.contains("on") || pendingBarcode!==code) return;
+    if(typeof pendingPhoto==="string" && pendingPhoto.startsWith("data:")) return;   // already a custom photo
+    pendingPhoto=d; showPhoto(d);
+  });
+}
+var _bfAt=0;
+function backfillBarcodePhotos(){   // copy existing custom photos into the barcode + name memory (throttled)
+  const now=Date.now(); if(now-_bfAt<60000) return; _bfAt=now;
+  (state.items||[]).forEach(function(it){ if(it.photo!=="L") return;
+    const keys=[]; if(it.barcode) keys.push("bc:"+it.barcode); const nk=_nmKey(it.name); if(nk) keys.push("nm:"+nk);
+    if(!keys.length) return;
+    const put=function(d){ if(typeof d==="string" && d.startsWith("data:")) keys.forEach(function(k){ idbGet(k).then(function(x){ if(!x) idbPut(k,d); }); }); };
+    if(_photoMem[it.id]) put(_photoMem[it.id]); else idbGet(it.id).then(put);
+  });
+}
+// ♻️ Recover the photos of items you deleted, using a backup file (it links each old item to its barcode + name).
+// Photos only — never changes your items, amounts or lists.
+async function recoverPhotosFromBackup(json){
+  let items=[]; try{ const o=JSON.parse(json); items=(o && o.state && o.state.items) || (o && o.items) || []; }catch(e){ toast("That file isn't a PantryHub backup","warn"); return; }
+  const ok=function(p){ return typeof p==="string" && p.startsWith("data:"); };
+  const cands=items.filter(function(it){ return it && it.id && (it.photo==="L" || ok(it.photo)); });
+  if(!cands.length){ toast("No photos found in that backup","warn"); return; }
+  toast("♻️ Recovering "+cands.length+" photo(s)… keep the app open","good");
+  const canUp = window.Photos && (typeof canEdit!=="function" || canEdit());
+  let found=0, applied=0, missing=0;
+  for(const it of cands){
+    let d=ok(it.photo)?it.photo:(_photoMem[it.id] || await idbGet(it.id));
+    if(!ok(d) && window.Photos){ try{ d=await window.Photos.get(it.id); }catch(e){} }
+    if(!ok(d)){ missing++; continue; }
+    found++;
+    if(it.barcode && !(await idbGet("bc:"+it.barcode))){ await idbPut("bc:"+it.barcode,d); if(canUp){ try{ await window.Photos.save(_bcPhotoCloudId(it.barcode),d); }catch(e){} } }
+    const nk=_nmKey(it.name); if(nk && !(await idbGet("nm:"+nk))) await idbPut("nm:"+nk,d);
+    state.items.forEach(function(cur){
+      if(cur.photo==="L") return;                                             // keep photos you already have
+      if((it.barcode && cur.barcode===it.barcode) || (nk && _nmKey(cur.name)===nk)){ setLocalPhoto(cur.id,d); cur.photo="L"; applied++; }
+    });
+  }
+  if(applied){ save(); renderAll(); }
+  toast("♻️ Recovered "+found+" photo(s)"+(applied?" · "+applied+" put back on current items":"")+(missing?" · "+missing+" couldn't be found":""),"good");
 }
 // Resolve an item's real photo bytes from any store: session cache -> IndexedDB -> cloud (by id) -> shared DB (by barcode) -> generic (by name).
 function resolveItemPhoto(id, bc, name){
@@ -3206,6 +3301,7 @@ function fulfillGroceryLine(g, info, code){
   save(); renderAll();
   if(renamed) toastUndo("🛒 “"+g.name+"” checked off — matched your list","good",function(){ Object.assign(g,prev); save(); renderAll(); });
   else toast("🛒 “"+g.name+"” checked off into the cart","good");
+  applyRememberedPhoto(g, code||g.barcode);
   askGrocExpiry(g.id);
 }
 // Does a scanned product fulfill something on the grocery list? Same-item/different-brand AND
@@ -3265,6 +3361,7 @@ async function groceryScanBarcode(code){
     if(info.name) $("#fName").value=info.name;
     if(info.category) setCatSelect(info.category);
     if(info.photo){ pendingPhoto=info.photo; showPhoto(pendingPhoto); }
+    upgradePendingPhoto(code);
     updateFreshInfo();
   } else { grocScanNext(); }
 }
@@ -3344,6 +3441,7 @@ function applyBarcodeResult(nm, catGuess, imgUrl){
   $("#fCat").value=CAT_ORDER.includes(cat)?cat:"Other";
   $("#autoCatTag").textContent=" → auto: "+$("#fCat").value;
   if(imgUrl){ pendingPhoto=imgUrl; showPhoto(pendingPhoto); }
+  upgradePendingPhoto(pendingBarcode);
   updateFreshInfo();
   toast("✓ Detected: "+nm,"good");
   if(chainDate){ chainDate=false; setTimeout(()=>{ if($("#itemScrim").classList.contains("on")) openCamera("date"); }, 450); }
@@ -4073,6 +4171,11 @@ const importInput=document.createElement("input");
 importInput.type="file"; importInput.accept="application/json,.json"; importInput.style.display="none";
 document.body.appendChild(importInput);
 $("#btnImport").addEventListener("click",()=>importInput.click());
+const recoverInput=document.createElement("input");
+recoverInput.type="file"; recoverInput.accept="application/json,.json"; recoverInput.style.display="none";
+document.body.appendChild(recoverInput);
+$("#btnRecoverPhotos") && $("#btnRecoverPhotos").addEventListener("click",()=>{ if(!requireEdit()) return; recoverInput.click(); });
+recoverInput.addEventListener("change",()=>{ const f=recoverInput.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ recoverPhotosFromBackup(String(rd.result||"")); recoverInput.value=""; }; rd.readAsText(f); });
 importInput.addEventListener("change",()=>{
   const f=importInput.files[0]; if(!f) return;
   const rd=new FileReader();
