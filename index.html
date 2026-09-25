@@ -592,7 +592,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 88 · 2026-09-25</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 89 · 2026-09-25</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -3375,6 +3375,38 @@ function fetchT(url,opts,ms){ ms=ms||6000; var c=(typeof AbortController!=="unde
 function onBarcode(code){ if(scanTarget==="grocery") groceryScanBarcode(code); else lookupBarcode(code); }
 
 // Resolve a barcode to {name,category,photo} WITHOUT touching the add form (cache -> Open Food Facts).
+// ===== Extra free barcode databases (no AI needed when one of them knows the product) =====
+function cleanUpcTitle(t){   // "5 Boxes Buckley's Cold & Sinus 24 Liquid Gels 24 Hour Pack Canada Made" -> "Buckley's Cold & Sinus Liquid Gels"
+  let x=String(t||"")
+    .replace(/^\s*(lot|set|pack|case|box)\s+of\s+\d+\s*/i,"")
+    .replace(/^\s*(lot of\s*)?\d+\s*(boxes|box|packs?|pk|x|ct|count|pcs|pieces|bottles?|cans?|jars?|bags?)\b\s*(of\s*)?/i,"")
+    .replace(/\b\d+(\.\d+)?\s*(liquid gels|softgels|capsules|caplets|tablets)\b/ig, function(m){ return m.replace(/^[\d.]+\s*/,""); })
+    .replace(/\b\d+(\.\d+)?\s*(fl\.?\s*oz|oz|ml|l|g|kg|lb|lbs|ct|count|pk|pack|pcs|pieces)\b\.?/ig,"")
+    .replace(/\b\d+\s*hours?\s*(pack)?\b/ig,"")
+    .replace(/\b(made in \w+|\w+ made|brand new|new|sealed|value pack|bundle|pack of \d+)\b/ig,"")
+    .replace(/[,;|(\[].*$/,"")
+    .replace(/\s{2,}/g," ").trim();
+  const w=x.split(" "); if(w.length>8) x=w.slice(0,8).join(" ");
+  return x;
+}
+let _upcOffAt=0;   // Worker without barcode support (re-checked after 10 minutes)
+function _firstFound(ps){ return new Promise(function(res){ let left=ps.length; if(!left) return res(null); ps.forEach(function(p){ Promise.resolve(p).then(function(v){ if(v) res(v); else if(--left===0) res(null); }, function(){ if(--left===0) res(null); }); }); }); }
+async function lookupExtraDBs(code){
+  code=String(code||"").replace(/\s/g,""); if(!code) return null;
+  const facts=function(host,src){ return fetchT("https://"+host+"/api/v2/product/"+code+".json?fields=product_name,brands,image_front_small_url",null,6000)
+    .then(function(r){ return r.json(); }).then(function(j){ if(j && j.status===1 && j.product && (j.product.product_name||j.product.brands)){ const p=j.product; const nm=[p.brands?p.brands.split(",")[0]:"", p.product_name].filter(Boolean).join(" ").trim(); if(nm) return {name:nm, photo:p.image_front_small_url||null, src:src}; } return null; })
+    .catch(function(){ return null; }); };
+  const tries=[ facts("world.openproductsfacts.org","Open Products Facts"), facts("world.openbeautyfacts.org","Open Beauty Facts") ];
+  if(window.GEMINI && window.GEMINI_PROXY && !(_upcOffAt && Date.now()-_upcOffAt<600000)){
+    tries.push(fetchT(window.GEMINI_PROXY,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task:"barcode",code:code})},9000)
+      .then(function(r){ return r.json(); }).then(function(j){
+        if(!j || !("found" in j)){ _upcOffAt=Date.now(); return null; }   // Worker not upgraded yet
+        if(j.found && j.title){ const nm=cleanUpcTitle(j.title); if(nm) return {name:nm, photo:null, src:"the UPC database"}; }
+        return null; })
+      .catch(function(){ return null; }));
+  }
+  return _firstFound(tries);
+}
 async function resolveProduct(code){
   const cached=getProducts()[code];
   if(cached && (cached.name||cached.photo)) return {name:cached.name||"", category:cached.category||null, photo:cached.photo||null};
@@ -3390,6 +3422,7 @@ async function resolveProduct(code){
       return info;
     }
   }catch(e){}
+  try{ const x=await lookupExtraDBs(code); if(x && x.name){ const info={name:x.name, category:autoCategory(x.name), photo:x.photo||null}; rememberProduct(code, info); return info; } }catch(e){}
   return {name:"", category:null, photo:null};
 }
 
@@ -3552,6 +3585,8 @@ async function lookupBarcode(code){
       return;
     }
   }catch(e){}
+  try{ const x=await lookupExtraDBs(code); if(myGen!==scanGen) return;
+    if(x && x.name){ applyBarcodeResult(x.name, null, x.photo||null); rememberProduct(code,{name:x.name, category:$("#fCat").value, photo:x.photo||null}); toast("✓ Found in "+x.src,"good"); return; } }catch(e){}
   if(myGen!==scanGen) return;
   const bf=$("#fBarcode"); if(bf && !bf.value.trim()) bf.value=code;   // fill the scanned number automatically
   toast(isAdmin()?"Not in the database — its barcode is filled in. Type the name + add a photo, then Save to share it.":"Not in the database — its barcode is filled in. Snap the front of the product and I'll read its name.","warn");
