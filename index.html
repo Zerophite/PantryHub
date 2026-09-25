@@ -591,7 +591,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 83 · 2026-09-25</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 85 · 2026-09-25</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1849,7 +1849,8 @@ function hydratePhotos(){ try{ backfillBarcodePhotos(); }catch(e){} try{ documen
   const usePerId=(p)=>{ _photoMem[id]=p; try{ idbPut(id,p); }catch(e){} img.src=p; done(); };
   // Per-item photo (by id) is the fallback: a genuinely custom photo, or offline.
   const tryPerId=()=>{ idbGet(id).then(d=>{ if(ok(d)){ ensureCloudPhoto(id,d); return usePerId(d); }
-    if(window.Photos){ window.Photos.get(id).then(p=>{ if(ok(p)) return usePerId(p); done(); }).catch(done); } else done();
+    const tryMem=()=>{ try{ rememberedPhotoFor(bc,nmv).then(p=>{ if(ok(p)) return useShared(p); done(); }).catch(done); }catch(e){ done(); } };
+    if(window.Photos){ window.Photos.get(id).then(p=>{ if(ok(p)) return usePerId(p); tryMem(); }).catch(tryMem); } else tryMem();
   }); };
   const tryName=()=>{ const k=(typeof nameKey==="function")?nameKey(nmv):""; if(k && window.Products){ window.Products.get(k).then(g=>{ if(g && ok(g.photo)) return useShared(g.photo); tryPerId(); }).catch(tryPerId); } else tryPerId(); };
   const tryBc=()=>{ if(bc && window.Products){ window.Products.get(bc).then(sp=>{ if(sp && ok(sp.photo)) return useShared(sp.photo); tryName(); }).catch(tryName); } else tryName(); };
@@ -2343,7 +2344,7 @@ function setCountPrompt(id){
 }
 function decCount(id){ if(!requireEdit()) return; const it=getItem(id); if(!it) return; const c=itemCount(it);
   if(c>1){ it.count=c-1; save(); renderAll(); }
-  else { if(confirm("That's your last “"+it.name+"”. Remove it from your pantry?")){ state.items=state.items.filter(x=>x.id!==it.id); save(); renderAll(); toast("Removed: "+it.name,"good"); } } }
+  else { if(confirm("That's your last “"+it.name+"”. Remove it from your pantry?")){ stashItemPhoto(it); state.items=state.items.filter(x=>x.id!==it.id); save(); renderAll(); toast("Removed: "+it.name,"good"); } } }
 function moveItem(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
@@ -2466,7 +2467,7 @@ function openItemSheet(id){
   { const bn=$("#btnSaveNext"); if(bn) bn.style.display=it?"none":""; }
   { const _mb=$("#btnMoveItem"); if(_mb){ if(it && it.location==="grocery"){ _mb.style.display=""; _mb.textContent="Move to Pantry"; } else { _mb.style.display="none"; } } }
   updateFreshInfo();
-  { const g=$("#chipGoogleImg"); if(g) g.style.display=isAdmin()?"":"none"; const pz=$("#chipPasteImg"); if(pz) pz.style.display=isAdmin()?"":"none"; }
+  { const g=$("#chipGoogleImg"); if(g) g.style.display=isAdmin()?"":"none"; const pz=$("#chipPasteImg"); if(pz) pz.style.display=isAdmin()?"":"none"; const ph=$("#chipPhoto"); if(ph) ph.style.display=isAdmin()?"":"none"; }
   itemScrim.classList.add("on");
   try{ $("#itemSheet").scrollTop=0; }catch(e){}
   requestAnimationFrame(()=>{ try{ $("#itemSheet").scrollTop=0; }catch(e){} });
@@ -2670,7 +2671,7 @@ $("#btnSaveNext").addEventListener("click",()=>{
 $("#btnMoveItem").addEventListener("click",()=>{ if(editingId){ moveItem(editingId); closeItemSheet(); } });
 $("#btnDeleteItem").addEventListener("click",()=>{
   if(!requireEdit()) return;
-  if(editingId && confirm("Delete this item permanently?")){ const _idx=state.items.findIndex(i=>i.id===editingId); if(_idx<0){ closeItemSheet(); return; } const _rm=state.items[_idx]; state.items.splice(_idx,1); save(); renderAll(); closeItemSheet(); toastUndo("🗑️ “"+((_rm&&_rm.name)||"Item")+"” deleted","good",function(){ state.items.splice(Math.min(_idx,state.items.length),0,_rm); save(); renderAll(); }); }
+  if(editingId && confirm("Delete this item permanently?")){ const _idx=state.items.findIndex(i=>i.id===editingId); if(_idx<0){ closeItemSheet(); return; } const _rm=state.items[_idx]; stashItemPhoto(_rm); state.items.splice(_idx,1); save(); renderAll(); closeItemSheet(); toastUndo("🗑️ “"+((_rm&&_rm.name)||"Item")+"” deleted","good",function(){ state.items.splice(Math.min(_idx,state.items.length),0,_rm); save(); renderAll(); }); }
 });
 
 /* ============================================================
@@ -2803,11 +2804,12 @@ function rememberProduct(code, info){
 // Remember YOUR custom photo per barcode, so rescanning/restocking the same product reuses it —
 // even after the old item was used up and deleted. Kept in IndexedDB + this pantry's cloud copy.
 function _bcPhotoCloudId(code){ return "bc_"+String(window.CURRENT_PANTRY||"local").replace(/[^A-Za-z0-9_-]/g,"")+"_"+String(code).replace(/[^A-Za-z0-9_-]/g,""); }
-function rememberBarcodePhoto(code,data){
+function rememberBarcodePhoto(code,data,force){
   if(!code || typeof data!=="string" || !data.startsWith("data:")) return;
+  if(!force && !isAdmin()) return;   // only the admin sets custom photos
   idbGet("bc:"+code).then(function(prev){
-    if(prev===data) return;
-    idbPut("bc:"+code,data);
+    if(prev===data && !force) return;
+    if(prev!==data) idbPut("bc:"+code,data);
     if(window.Photos && (typeof canEdit!=="function" || canEdit())) window.Photos.save(_bcPhotoCloudId(code),data).catch(function(){});
   });
 }
@@ -2824,11 +2826,27 @@ async function customPhotoForBarcode(code){
 }
 // Photo memory by product NAME too (items without a barcode, e.g. "Banana", "Eggs").
 function _nmKey(name){ return normName(name||""); }
-function rememberNamePhoto(name,data){ const k=_nmKey(name); if(!k || typeof data!=="string" || !data.startsWith("data:")) return; idbPut("nm:"+k,data); }
+function _nmPhotoCloudId(name){ return "nm_"+String(window.CURRENT_PANTRY||"local").replace(/[^A-Za-z0-9_-]/g,"")+"_"+_nmKey(name).replace(/[^a-z0-9]+/g,"-").slice(0,120); }
+function rememberNamePhoto(name,data,force){
+  const k=_nmKey(name); if(!k || typeof data!=="string" || !data.startsWith("data:")) return;
+  if(!force && !isAdmin()) return;   // only the admin sets custom photos
+  idbGet("nm:"+k).then(function(prev){
+    if(prev===data && !force) return;
+    if(prev!==data) idbPut("nm:"+k,data);
+    if(window.Photos && (typeof canEdit!=="function" || canEdit())) window.Photos.save(_nmPhotoCloudId(name),data).catch(function(){});
+  });
+}
+// Before an item is deleted, keep its photo in the pantry's shared memory so ANY member re-adding/rescanning it gets it back.
+function stashItemPhoto(it){
+  if(!it || it.photo!=="L") return;
+  const go=function(d){ if(typeof d!=="string" || !d.startsWith("data:")) return; if(it.barcode) rememberBarcodePhoto(it.barcode,d,true); rememberNamePhoto(it.name,d,true); };
+  if(_photoMem[it.id]) go(_photoMem[it.id]); else idbGet(it.id).then(function(d){ if(d) return go(d); if(window.Photos) window.Photos.get(it.id).then(go).catch(function(){}); });
+}
 async function rememberedPhotoFor(code,name){
   const ok=function(p){ return typeof p==="string" && p.startsWith("data:"); };
   let d=code?await customPhotoForBarcode(code):null; if(ok(d)) return d;
-  const k=_nmKey(name); if(k){ d=await idbGet("nm:"+k); if(ok(d)) return d; }
+  const k=_nmKey(name); if(k){ d=await idbGet("nm:"+k); if(ok(d)) return d;
+    if(window.Photos){ try{ d=await window.Photos.get(_nmPhotoCloudId(name)); if(ok(d)){ idbPut("nm:"+k,d); return d; } }catch(e){} } }
   return null;
 }
 // Give an item your remembered photo (by barcode, then by name). Never replaces a custom photo it already has.
@@ -2861,6 +2879,7 @@ function backfillBarcodePhotos(){   // copy existing custom photos into the barc
 // ♻️ Recover the photos of items you deleted, using a backup file (it links each old item to its barcode + name).
 // Photos only — never changes your items, amounts or lists.
 async function recoverPhotosFromBackup(json){
+  if(!isAdmin()){ toast("Only the admin can recover photos","warn"); return; }
   let items=[]; try{ const o=JSON.parse(json); items=(o && o.state && o.state.items) || (o && o.items) || []; }catch(e){ toast("That file isn't a PantryHub backup","warn"); return; }
   const ok=function(p){ return typeof p==="string" && p.startsWith("data:"); };
   const cands=items.filter(function(it){ return it && it.id && (it.photo==="L" || ok(it.photo)); });
@@ -2874,7 +2893,7 @@ async function recoverPhotosFromBackup(json){
     if(!ok(d)){ missing++; continue; }
     found++;
     if(it.barcode && !(await idbGet("bc:"+it.barcode))){ await idbPut("bc:"+it.barcode,d); if(canUp){ try{ await window.Photos.save(_bcPhotoCloudId(it.barcode),d); }catch(e){} } }
-    const nk=_nmKey(it.name); if(nk && !(await idbGet("nm:"+nk))) await idbPut("nm:"+nk,d);
+    const nk=_nmKey(it.name); if(nk && !(await idbGet("nm:"+nk))){ await idbPut("nm:"+nk,d); if(canUp){ try{ await window.Photos.save(_nmPhotoCloudId(it.name),d); }catch(e){} } }
     state.items.forEach(function(cur){
       if(cur.photo==="L") return;                                             // keep photos you already have
       if((it.barcode && cur.barcode===it.barcode) || (nk && _nmKey(cur.name)===nk)){ setLocalPhoto(cur.id,d); cur.photo="L"; applied++; }
@@ -2896,7 +2915,7 @@ function resolveItemPhoto(id, bc, name){
 }
 function showPhoto(url){
   const pv=$("#photoPreview"), hint=$("#photoHint");
-  const show=u=>{ pv.src=u; pv.style.display="block"; hint.textContent="Tap “Add photo” to replace"; };
+  const show=u=>{ pv.src=u; pv.style.display="block"; hint.textContent=isAdmin()?"Tap “Add photo” to replace":""; };
   if(typeof url==="string" && (url.startsWith("data:")||url.startsWith("http"))){ show(url); return; }
   pv.style.display="none"; pv.removeAttribute("src"); hint.textContent="🖼️ No photo yet";
   if(url==="L"){ hint.textContent="Loading photo…";
@@ -2919,7 +2938,7 @@ function toThumb(imgOrCanvas,max=360,q=0.62){
 const fileInput=document.createElement("input");
 fileInput.type="file"; fileInput.accept="image/*"; fileInput.capture="environment"; fileInput.style.display="none";
 document.body.appendChild(fileInput);
-$("#chipPhoto").addEventListener("click",()=>{ photoMode="photo"; fileInput.click(); });
+$("#chipPhoto").addEventListener("click",()=>{ if(!isAdmin()){ toast("Only the admin can change photos","warn"); return; } photoMode="photo"; fileInput.click(); });
 $("#chipReadName").addEventListener("click",()=>{ openCamera("name"); });
 let photoMode="photo";
 fileInput.addEventListener("change",()=>{
@@ -2927,7 +2946,7 @@ fileInput.addEventListener("change",()=>{
   const img=new Image();
   img.onload=()=>{
     if(photoMode==="identify"){ identifyPhoto(toThumb(img,720,0.78)); }
-    else { pendingPhoto=toThumb(img); showPhoto(pendingPhoto); toast("Photo added","good"); }
+    else { if(!isAdmin()){ toast("Only the admin can change photos","warn"); return; } pendingPhoto=toThumb(img); showPhoto(pendingPhoto); toast("Photo added","good"); }
   };
   img.src=URL.createObjectURL(f);
   fileInput.value="";
@@ -3031,6 +3050,7 @@ $("#camTorch") && $("#camTorch").addEventListener("click",()=>setTorch(!torchOn)
 $("#qsBarcode").addEventListener("click",()=>{ rapidMode=true; chainDate=true; scanTarget="pantry"; openCamera("barcode"); });
 $("#qsDate").addEventListener("click",()=>openCamera("date"));
 $("#chipGoogleImg").addEventListener("click",()=>{
+  if(!isAdmin()){ toast("Only the admin can change photos","warn"); return; }
   const q=$("#fName").value.trim(); if(!q){ toast("Type the item name first","warn"); return; }
   window.open("https://www.google.com/search?tbm=isch&q="+encodeURIComponent(q),"_blank");
   toast("Find an image → long-press → Copy, then tap “Paste image”","good");
@@ -3087,6 +3107,7 @@ $("#cropUse").addEventListener("click",()=>{
 });
 // Paste an image straight from the clipboard (no Photos access) -> crop -> set
 $("#chipPasteImg").addEventListener("click",async()=>{
+  if(!isAdmin()){ toast("Only the admin can change photos","warn"); return; }
   try{
     if(!navigator.clipboard || !navigator.clipboard.read){ toast("This browser can't paste images — copy the image, or use Add your own photo","warn"); return; }
     const items=await navigator.clipboard.read();
@@ -3503,6 +3524,7 @@ $("#camShutter").addEventListener("click",async()=>{
   }else if(camMode==="name"){
     const shot=captureNameRegion(); closeCamera(); await readNameLive(shot);
   }else{
+    if(!isAdmin()){ closeCamera(); toast("Only the admin can change photos","warn"); return; }
     pendingPhoto=toThumb(camVideo,420,0.62); closeCamera(); showPhoto(pendingPhoto); toast("Photo captured","good");
   }
 });
@@ -4043,7 +4065,7 @@ $("#setSort").addEventListener("change",()=>{ state.settings.sort=$("#setSort").
 $("#btnAutoSort").addEventListener("click",autoSortAllItems);
 function isAdmin(){ try{ const v=localStorage.getItem("pantry_admin"); return !!v && v===(window.CURRENT_PANTRY||"local"); }catch(e){ return false; } }
 async function sha256hex(str){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
-function updateAdminState(){ const inn=$("#adminIn"), out=$("#adminOut"); if(!inn||!out) return; const a=isAdmin(); inn.style.display=a?"":"none"; out.style.display=a?"none":""; }
+function updateAdminState(){ { const rp=$("#btnRecoverPhotos"); if(rp) rp.style.display=isAdmin()?"":"none"; } const inn=$("#adminIn"), out=$("#adminOut"); if(!inn||!out) return; const a=isAdmin(); inn.style.display=a?"":"none"; out.style.display=a?"none":""; }
 $("#btnAdminUnlock").addEventListener("click",async()=>{
   const code=($("#adminCode").value||""); if(!code){ toast("Enter the admin code","warn"); return; }
   if(!window.ADMIN_SHA256){ toast("Admin code isn't set up yet","warn"); return; }
@@ -4174,7 +4196,7 @@ $("#btnImport").addEventListener("click",()=>importInput.click());
 const recoverInput=document.createElement("input");
 recoverInput.type="file"; recoverInput.accept="application/json,.json"; recoverInput.style.display="none";
 document.body.appendChild(recoverInput);
-$("#btnRecoverPhotos") && $("#btnRecoverPhotos").addEventListener("click",()=>{ if(!requireEdit()) return; recoverInput.click(); });
+$("#btnRecoverPhotos") && $("#btnRecoverPhotos").addEventListener("click",()=>{ if(!isAdmin()){ toast("Only the admin can recover photos","warn"); return; } recoverInput.click(); });
 recoverInput.addEventListener("change",()=>{ const f=recoverInput.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>{ recoverPhotosFromBackup(String(rd.result||"")); recoverInput.value=""; }; rd.readAsText(f); });
 importInput.addEventListener("change",()=>{
   const f=importInput.files[0]; if(!f) return;
