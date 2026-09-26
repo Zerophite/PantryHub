@@ -592,7 +592,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 92 · 2026-09-25</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 94 · 2026-09-26</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -643,6 +643,8 @@ body.viewonly .vobadge{display:block}
         <button class="btn sec" id="btnImport">⬆️ Import backup</button>
       </div>
       <button class="btn ghost" id="btnRecoverPhotos" style="margin-top:8px" title="Brings back photos of items you deleted. Photos only — your items are not changed.">♻️ Recover photos from a backup</button>
+      <button class="btn ghost" id="btnShelfCheck" style="margin-top:8px;display:none">🔍 Check shelf lives</button>
+      <div id="shelfReport" style="display:none;margin-top:8px;font-size:14px"></div>
       <button class="btn ghost" id="btnRestoreSnap" style="display:none;margin-top:8px">↩︎ Undo last import / restore previous data</button>
       <div class="sub-hint" id="snapHint" style="display:none;margin:6px 0 0"></div>
     </div>
@@ -1420,13 +1422,13 @@ const CAT_RULES=[
   // --- Oils, Vinegars & Condiments ---
   [["olive oil","vegetable oil","canola","sesame oil","cooking oil","cooking spray","oil","vinegar","soy sauce","oyster sauce","hoisin","worcestershire","liquid smoke","liquid seasoning","ketchup","catsup","mustard","mayo","mayonnaise","sriracha","hot sauce","bbq sauce","bbq mustard","barbecue","dressing","relish","gochujang","teriyaki","cooking wine","mirin","sake","shaoxing","maggi","koji","sweet soy","tabasco","salsa","salsa verde","mexican sauce","taco sauce","enchilada sauce","picante","pesto","curry paste","dipping sauce","tempura","jam","jelly","honey","maple syrup","syrup"],"Oils, Vinegars & Condiments"],
   // --- Canned & Jarred ---
-  [["canned","beans","chickpea","kidney bean","black bean","garbanzo","mung bean","tomato paste","tomato sauce","canned tomato","sweet corn","creamed corn","canned corn","peas","jarred","pickle","peperoncini","olives","caper","capers","pasta sauce","spaghetti sauce","refried","sundried tomato","sun dried tomato"],"Canned & Jarred"],
+  [["canned","beans","chickpea","kidney bean","black bean","garbanzo","mung bean","tomato paste","tomato sauce","canned tomato","sweet corn","creamed corn","canned corn","peas","jarred","pickle","peperoncini","olives","caper","capers","pasta sauce","spaghetti sauce","refried","sundried tomato","sun dried tomato","chipotle"],"Canned & Jarred"],
   // --- Grains & Pasta ---
   [["rice noodle","rice paper","rice","pasta","spaghetti","macaroni","noodle","ramen","udon","vermicelli","lasagna","bread","tortilla","oats","oatmeal","cereal","quinoa","couscous","barley","bun","bagel","grain"],"Grains & Pasta"],
   // --- Fruits & Vegetables ---
   [["apple","banana","orange","grape","berry","strawberr","blueberr","cranberr","mango","melon","pineapple","lemon","lime","avocado","tomato","potato","onion","garlic","ginger","carrot","broccoli","cauliflower","spinach","lettuce","cabbage","cucumber","celery","mushroom","zucchini","squash","kalabasa","eggplant","okra","sprout","kangkong","bok choy","malunggay","sitaw","lemongrass","raisin","dried fruit","produce","vegetable","fruit"],"Fruits & Vegetables"],
   // --- Snacks ---
-  [["chip","nuts","almond","cashew","peanut","granola","candy","chocolate","wafer","rice cake"],"Snacks"],
+  [["chip","nuts","almond","cashew","peanut","walnut","pecan","pistachio","hazelnut","macadamia","granola","candy","chocolate","wafer","rice cake"],"Snacks"],
   // --- Beverages ---
   [["water","soda","cola","coffee"," tea","milk tea","energy drink","gatorade","lemonade","beer","wine ","liquor","kombucha","sparkling","soft drink"],"Beverages"],
   // --- Supplements ---
@@ -1443,11 +1445,17 @@ function autoCategory(name){
   return "Other";
 }
 // Keyword-only category (no learned prefs) — for re-sorting existing items into the scheme.
+const _kwRe={};
+function _kwHit(n,kw){   // keywords of 4 letters or fewer must be a whole word (plural allowed); longer ones may be part of a word
+  const k=kw.trim(); if(k.length>4) return n.includes(kw);
+  const re=_kwRe[k]||(_kwRe[k]=new RegExp("(^|[^a-z])"+k.replace(/[.*+?^$(){}|[\]\\]/g,"\\$&")+"(e?s)?([^a-z]|$)"));
+  return re.test(n);
+}
 function autoCategoryStrict(name){
   const n=(name||"").toLowerCase();
   if(/\b(onion|garlic|ginger|chill?i|chile|shallot|scallion)\b/.test(n) && /\b(powder|powdered|granulated|granules?|ground|dried|dehydrated|flakes?|salt|seasoning)\b/.test(n)) return "Spices & Seasonings";  // granulated onion / garlic powder / ground ginger
   if(/\b(lemon|lime|orange|citrus)\b/.test(n) && /\b(pepper|herbs?|seasoning|spice|rub)\b/.test(n)) return "Spices & Seasonings";  // lemon pepper / lemon & herbs seasoning
-  for(const [kws,cat] of CAT_RULES){ for(const kw of kws){ if(n.includes(kw)) return cat; } }
+  for(const [kws,cat] of CAT_RULES){ for(const kw of kws){ if(_kwHit(n,kw)) return cat; } }
   return null;
 }
 // Re-file every item into its best-matching EXISTING category (safe: won't invent categories).
@@ -1475,7 +1483,9 @@ const FRESH=[
   [["avocado oil"],{fridge:0,freezer:0,pantry:365}],
   [["extra virgin olive oil","olive oil","huile"],{fridge:0,freezer:0,pantry:540}],
   [["tuyo","tunsoy","daing","dried fish","dried squid","dried dilis","dilis","dried anchov"],{fridge:180,freezer:365,pantry:180}],
-  [["cabernet","merlot","sauvignon","pinot noir","chardonnay","shiraz","malbec","red wine","white wine","rose wine"],{fridge:20,freezer:0,pantry:5}],
+  [["cabernet","merlot","sauvignon","pinot noir","pinot grigio","pinot gris","pinot","chardonnay","riesling","moscato","prosecco","sangria","shiraz","malbec","red wine","white wine","rose wine"],{fridge:20,freezer:0,pantry:5}],
+  [["katsuobushi","bonito flake","bonito"],{fridge:90,freezer:365,pantry:60}],
+  [["french fries","fries"],{fridge:0,freezer:180,pantry:0}],
   [["green mexican sauce","mexican sauce","enchilada","taco sauce","green sauce"],{fridge:21,freezer:0,pantry:14}],
   [["cappuccino","coffee mix","3 in 1 coffee","instant cappuccino"],{fridge:0,freezer:0,pantry:365}],
   [["apple cider vinegar","cider vinegar","balsamic vinegar","rice vinegar","wine vinegar","white vinegar","malt vinegar","distilled vinegar"],{fridge:730,freezer:0,pantry:730}],
@@ -1525,7 +1535,7 @@ const FRESH=[
   [["refried beans"],{fridge:5,freezer:90,pantry:1}],
   [["pickled ginger","sushi ginger"],{fridge:180,freezer:0,pantry:14}],
   [["chutney"],{fridge:60,freezer:0,pantry:14}],
-  [["bagel","english muffin","naan","croissant","dinner roll","hamburger bun","hot dog bun","burger bun"],{fridge:10,freezer:90,pantry:4}],
+  [["bagel","english muffin","naan","pita","flatbread","croissant","dinner roll","hamburger bun","hot dog bun","burger bun"],{fridge:10,freezer:90,pantry:4}],
   // --- Dry seasoning/spice OVERRIDES first (stop fresh produce/meat words from stealing the match) ---
   [["lemon pepper","black pepper","white pepper","peppercorn","pepper flakes","red pepper","chili pepper","chilli pepper","crushed pepper","cracked pepper","pepper powder","chili flakes","chilli flakes","chili powder","cayenne pepper"],{fridge:730,freezer:730,pantry:730}],
   [["ground cinnamon","ground ginger","ground clove","ground cumin","ground coriander","ground nutmeg","ground allspice","ground mustard","ground turmeric","ground paprika","ground pepper"],{fridge:365,freezer:365,pantry:365}],
@@ -1607,7 +1617,7 @@ const FRESH=[
   // -- Frozen --
   [["frozen vegetable","frozen veg","frozen pea","frozen corn","frozen broccoli","frozen spinach"],{fridge:2,freezer:300,pantry:0}],
   [["frozen fruit","frozen berry"],{fridge:1,freezer:300,pantry:0}],
-  [["ice cream","gelato","sorbet","frozen yogurt"],{fridge:0,freezer:60,pantry:0}],
+  [["ice cream","gelato","sorbet","frozen yogurt","halo top"],{fridge:0,freezer:60,pantry:0}],
   [["frozen meal","frozen dinner","frozen pizza","frozen waffle","frozen nugget"],{fridge:1,freezer:180,pantry:0}],
   // --- Dairy ---
   [["evaporated","condensed milk","sweetened condensed"],{fridge:5,freezer:0,pantry:1}],
@@ -1619,7 +1629,7 @@ const FRESH=[
   [["cream cheese"],{fridge:14,freezer:0,pantry:1}],
   [["mozzarella","shredded cheese"],{fridge:14,freezer:180,pantry:1}],
   [["cheese"],{fridge:21,freezer:180,pantry:1}],
-  [["cream","yogurt"],{fridge:7,freezer:0,pantry:1}],
+  [["cream","yogurt","activia","skyr"],{fridge:7,freezer:0,pantry:1}],
   // --- Protein (fresh raw; timer from purchase) ---
   [["fish ball"],{fridge:3,freezer:90,pantry:1}],
   [["shrimp","prawn"],{fridge:2,freezer:120,pantry:0}],
@@ -1692,7 +1702,7 @@ const FRESH=[
   [["whole","seed","clove","anise","cardamon","cardamom","peppercorn","fennel","stick"],{fridge:730,freezer:730,pantry:730}],
   // --- Grains / pasta / noodles (after opening) ---
   [["fresh noodle","fresh udon","udon"],{fridge:7,freezer:120,pantry:180}],
-  [["corn tortilla","tortilla"],{fridge:21,freezer:180,pantry:7}],
+  [["corn tortilla","flour tortilla","wheat tortilla","tortilla"],{fridge:21,freezer:180,pantry:7}],
   [["rice noodle","egg noodle","ramen","lasagna","spaghetti","vermicelli","pasta","noodle"],{fridge:180,freezer:730,pantry:365}],
   [["oats","oatmeal"],{fridge:180,freezer:365,pantry:180}],
   [["rice","mung bean","bean","grain","quinoa"],{fridge:365,freezer:730,pantry:365}],
@@ -1736,6 +1746,7 @@ const _PRODUCE_RE=/(strawberr|blueberr|raspberr|blackberr|cranberr|banana|apple|
 const _NOT_FRESH=/juice|lemonade|\bade\b|drink|soda|cola|nectar|cordial|squash|punch|smoothie|shake|flavou?r|bottled|\bbottle\b|canned|\bcan\b|\bjar\b|syrup|\bjam\b|jelly|preserve|marmalade|sauce|ketchup|paste|puree|concentrate|powder|dried|dehydrated|chip|crisp|candy|gummy|yogurt|yoghurt|cream|popsicle|sorbet|jello|gelatin|extract|essence|\btea\b|coffee|latte|frappe|cider|wine|beer|liqueur|vodka|spirit|milk|vinegar|pickle|frozen/;
 const _PACKAGED_CAT=/Beverage|Condiment|Sauce|Oil|Canned|Soup|Baking|Snack|Season|Spice|Dried|Supplement|Pasta|Grain|Noodle|Dairy|Frozen/i;
 const _PERISH_EXTRA=/(bread|bun|bagel|baguette|brioche|roll|pita|tortilla|naan|muffin|pastry|scone|donut|doughnut|butter|cheese|milk|cream|yogurt|yoghurt|egg|eggs|chicken|beef|pork|turkey|lamb|veal|fish|salmon|tilapia|shrimp|prawn|bacon|sausage|ham|meat|tofu|tempeh|steak|mince|deli)/;
+const _BAKED_KW=/^(bread|loaf|bun|bagel|baguette|brioche|roll|pita|naan|flatbread|tortilla|muffin|croissant)$/;
 const _DRY_CAT=/Snack|Baking|Grain|Pasta|Noodle|Beverage|Supplement|Spice|Season|Dried/i;
 function prettyKw(k){ k=(k||"").replace(/berr$/,"berry"); return k.charAt(0).toUpperCase()+k.slice(1); }
 function shelfLife(name,cat){
@@ -1746,11 +1757,12 @@ function shelfLife(name,cat){
     for(const kw of kws){
       if(!n.includes(kw)) continue;
       if(packaged && kw.indexOf(" ")===-1 && _PRODUCE_RE.test(kw) && !_NOT_FRESH.test(kw)) continue;   // packaged item merely mentioning a bare fruit/veg
-      if(_DRY_CAT.test(cat) && kw.indexOf(" ")===-1 && (_PRODUCE_RE.test(kw)||_PERISH_EXTRA.test(kw))) continue;   // dry/shelf-stable product just naming a perishable
+      if(_DRY_CAT.test(cat) && kw.indexOf(" ")===-1 && (_PRODUCE_RE.test(kw)||_PERISH_EXTRA.test(kw)) && !(/Grain|Pasta/i.test(cat) && _BAKED_KW.test(kw))) continue;   // dry/shelf-stable product just naming a perishable (bread IS a grain item)
       if(kw.length>bestLen){ bestLen=kw.length; best={d, kw}; }                // most-specific keyword wins
     }
   }
   if(best) return Object.assign({_basis:prettyKw(best.kw)}, best.d);
+  { const rs=(typeof researchedShelf==="function")?researchedShelf(name):null; if(rs) return {_basis:"researched", fridge:rs.f, freezer:rs.z, pantry:rs.p}; }
   if(cat && CAT_SHELF[cat]) return Object.assign({_basis:"cat:"+cat}, CAT_SHELF[cat]);
   return null;
 }
@@ -2548,7 +2560,7 @@ function updateFreshInfo(){
     else recLine=`🏷️ Best kept in the <b>${cap}</b>${opened?" now it's open":""}.`;
   }
   let basisLine="";
-  if(sl && sl._basis){ basisLine = /^cat:/.test(sl._basis) ? `ⓘ Estimate from the <b>${sl._basis.slice(4)}</b> category — set a date if you have one.` : `ⓘ Reading this as <b>${sl._basis}</b>. Not right? Just set the date yourself.`; }
+  if(sl && sl._basis){ basisLine = sl._basis==="researched" ? "ⓘ Shelf life researched for this product." : /^cat:/.test(sl._basis) ? `ⓘ Estimate from the <b>${sl._basis.slice(4)}</b> category — set a date if you have one.` : `ⓘ Reading this as <b>${sl._basis}</b>. Not right? Just set the date yourself.`; }
   let html="";
   if(opened && sl){
     let d=sl[storeVal]??sl.pantry;
@@ -2664,6 +2676,7 @@ $("#btnSaveItem").addEventListener("click",()=>{
   if(!editingId){ const _t3=state.items[state.items.length-1]; if(_t3 && !_t3.photo) applyRememberedPhoto(_t3); }   // re-adding something you had -> your old photo
   learnCat(data.name, data.category); lastCat=data.category;        // remember the user's own preference
   save(); renderAll(); closeItemSheet();
+  setTimeout(function(){ researchShelfLives(false); }, 3000);   // research a shelf life if this product is new to the app
 });
 $("#btnSaveNext").addEventListener("click",()=>{
   if(!$("#fName").value.trim()){ toast("Please enter an item name","warn"); return; }
@@ -4125,7 +4138,96 @@ $("#setSort").addEventListener("change",()=>{ state.settings.sort=$("#setSort").
 $("#btnAutoSort").addEventListener("click",autoSortAllItems);
 function isAdmin(){ try{ const v=localStorage.getItem("pantry_admin"); return !!v && v===(window.CURRENT_PANTRY||"local"); }catch(e){ return false; } }
 async function sha256hex(str){ const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(str)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join(""); }
-function updateAdminState(){ { const rp=$("#btnRecoverPhotos"); if(rp) rp.style.display=isAdmin()?"":"none"; } const inn=$("#adminIn"), out=$("#adminOut"); if(!inn||!out) return; const a=isAdmin(); inn.style.display=a?"":"none"; out.style.display=a?"none":""; }
+// ===== Automatic shelf-life research for products the app only has a category estimate for =====
+// Results live in the pantry itself (state.shelfAI), so every member gets them; each product is researched once.
+let _shelfResearchAt=0, _shelfOffAt=0, _shelfBusy=false;
+function _shelfKey(name){ return normName(name||""); }
+function researchedShelf(name){ const r=state.shelfAI && state.shelfAI[_shelfKey(name)]; return (r && !r.none) ? r : null; }
+function _safeShelf(x, cat){   // safety limits so a bad answer can't give fresh food months of shelf life
+  const num=function(v,max){ v=Math.round(+v); if(!isFinite(v) || v<0) return 0; return Math.min(v,max); };
+  const perish=/Fruit|Veg|Protein|Dairy|Refrigerat/i.test(cat||"");
+  const d=(perish && typeof CAT_SHELF!=="undefined" && CAT_SHELF[cat]) || null;
+  const lim=function(key,abs){ return (d && d[key]>0) ? Math.min(abs, d[key]*4) : abs; };
+  const P=num(x.pantry, lim("pantry", perish?14:1095)), F=num(x.fridge, lim("fridge", perish?120:1095)), Z=num(x.freezer, lim("freezer", 1095));
+  return (P||F||Z) ? {p:P, f:F, z:Z} : null;
+}
+function shelfCandidates(){
+  const now=Date.now(), seen={}, out=[];
+  (state.items||[]).forEach(function(it){
+    if(it.location!=="pantry") return;
+    const sl=shelfLife(it.name,it.category); if(!sl || !/^cat:/.test(sl._basis||"")) return;   // only items the app is estimating
+    const k=_shelfKey(it.name); if(!k || seen[k]) return; seen[k]=1;
+    const prev=state.shelfAI && state.shelfAI[k];
+    if(prev && prev.none && now-(prev.ts||0) < 7*86400000) return;                           // found nothing recently; retry weekly
+    out.push({k:k, name:it.name, cat:it.category, opened:!!it.opened});
+  });
+  out.sort(function(a,b){ return (b.opened?1:0)-(a.opened?1:0); });                            // opened items first
+  return out;
+}
+async function researchShelfLives(force){
+  if(!window.GEMINI || !window.GEMINI_PROXY) return {done:0, reason:"off"};
+  if(typeof canEdit==="function" && !canEdit()) return {done:0, reason:"view"};
+  if(_shelfBusy) return {done:0, reason:"busy"};
+  if(!force && Date.now()-_shelfResearchAt < 60000) return {done:0, reason:"recent"};
+  if(_shelfOffAt && Date.now()-_shelfOffAt < 600000) return {done:0, reason:"worker"};
+  const todo=shelfCandidates(); if(!todo.length) return {done:0, reason:"none"};
+  _shelfBusy=true; _shelfResearchAt=Date.now();
+  try{
+    const batch=todo.slice(0,15);
+    const r=await fetchT(window.GEMINI_PROXY,{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({task:"shelf", items:batch.map(function(b){ return {name:b.name, category:b.cat}; })})},35000);
+    const j=await r.json();
+    if(!j || !("results" in j)){ _shelfOffAt=Date.now(); return {done:0, reason:"worker"}; }   // Worker not upgraded yet
+    if(j.error && !(j.results||[]).length) return {done:0, reason:/quota|exceeded|429/i.test(j.error)?"quota":"error"};
+    if(!state.shelfAI) state.shelfAI={};
+    const now=Date.now(); let done=0;
+    batch.forEach(function(b,idx){
+      const x=(j.results||[]).find(function(q){ return +q.i===idx+1; });
+      const v=x ? _safeShelf(x, b.cat) : null;
+      state.shelfAI[b.k] = v ? {p:v.p, f:v.f, z:v.z, ts:now} : {none:true, ts:now};
+      if(v) done++;
+    });
+    save(); renderAll();
+    return {done:done, reason:"ok", more:todo.length>batch.length};
+  }catch(e){ return {done:0, reason:"error"}; }
+  finally{ _shelfBusy=false; }
+}
+// ----- Admin: shelf-life check (the same audit, inside the app) -----
+function renderShelfReport(){
+  const box=$("#shelfReport"); if(!box) return;
+  const items=(state.items||[]).filter(function(i){ return i.location==="pantry"; });
+  let spec=0, res=0; const est=[], cats=[], past=[];
+  items.forEach(function(it){
+    const sl=shelfLife(it.name,it.category);
+    if(!sl || /^cat:/.test(sl._basis||"")) est.push(it); else if(sl._basis==="researched") res++; else spec++;
+    if(/Fruit|Veg/i.test(it.category||"")){ const rule=autoCategoryStrict(it.name); if(rule && !/Fruit|Veg/i.test(rule)) cats.push(it.name+" → looks like "+rule); }
+    if(it.opened){ const f=freshStatus(it); if(f && f.daysLeft<0) past.push(it.name+" ("+(-f.daysLeft)+" day"+(f.daysLeft===-1?"":"s")+" past)"); }
+  });
+  est.sort(function(a,b){ return (b.opened?1:0)-(a.opened?1:0); });
+  const li=function(t){ return '<div style="padding:3px 0;border-bottom:1px solid var(--line,#eee)">'+escapeHtml(t)+'</div>'; };
+  let h='<div style="font-weight:800;margin-bottom:6px">'+items.length+' items · '+spec+' specific · '+res+' researched · '+est.length+' estimated</div>';
+  if(est.length){
+    h+='<div class="sub-hint" style="margin:8px 0 4px"><b>Estimated from category</b> (opened first)</div>'+est.map(function(it){ return li((it.opened?"Opened · ":"Sealed · ")+it.name+" ["+it.category+"]"); }).join("");
+    h+='<button class="btn sec" id="btnShelfResearch" style="margin-top:8px">Research these now</button>';
+  }
+  if(cats.length) h+='<div class="sub-hint" style="margin:10px 0 4px"><b>Check category</b></div>'+cats.map(li).join("");
+  if(past.length) h+='<div class="sub-hint" style="margin:10px 0 4px"><b>Opened and past best-by</b></div>'+past.map(li).join("");
+  if(!est.length && !cats.length && !past.length) h+='<div class="sub-hint">All items have a specific or researched shelf life. No issues found.</div>';
+  box.innerHTML=h; box.style.display="";
+  const b=$("#btnShelfResearch");
+  if(b) b.addEventListener("click", function(){
+    b.disabled=true; b.textContent="Researching…";
+    researchShelfLives(true).then(function(r){
+      const msg = r.reason==="ok" ? ("Researched "+r.done+" item"+(r.done===1?"":"s")+(r.more?". More remain — tap again.":"."))
+                : r.reason==="none" ? "Nothing left to research."
+                : r.reason==="worker" ? "Update the Cloudflare Worker to v6 to enable research."
+                : r.reason==="quota" ? "Daily scan limit reached. Try again tomorrow."
+                : r.reason==="off" ? "Research needs the scanner service." : "Research failed. Try again later.";
+      toast(msg, r.reason==="ok"?"good":"warn"); renderShelfReport();
+    });
+  });
+}
+function updateAdminState(){ { const rp=$("#btnRecoverPhotos"); if(rp) rp.style.display=isAdmin()?"":"none"; const sc=$("#btnShelfCheck"); if(sc) sc.style.display=isAdmin()?"":"none"; if(!isAdmin()){ const sr=$("#shelfReport"); if(sr) sr.style.display="none"; } } const inn=$("#adminIn"), out=$("#adminOut"); if(!inn||!out) return; const a=isAdmin(); inn.style.display=a?"":"none"; out.style.display=a?"none":""; }
 $("#btnAdminUnlock").addEventListener("click",async()=>{
   const code=($("#adminCode").value||""); if(!code){ toast("Enter the admin code","warn"); return; }
   if(!window.ADMIN_SHA256){ toast("Admin code isn't set up yet","warn"); return; }
@@ -4438,6 +4540,8 @@ $("#recipeResults") && $("#recipeResults").addEventListener("click",function(e){
 load();
 switchTab("pantry");
 renderAll();
+$("#btnShelfCheck") && $("#btnShelfCheck").addEventListener("click", function(){ const b=$("#shelfReport"); if(b && b.style.display!=="none"){ b.style.display="none"; return; } renderShelfReport(); });
+setTimeout(function(){ researchShelfLives(false); }, 15000);   // after cloud data has arrived
 
 // keep freshness fresh across midnight
 setInterval(renderAll, 60*60*1000);
