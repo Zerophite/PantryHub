@@ -46,11 +46,11 @@
 :root[data-theme="dark"] .btn.dzlink{border-color:var(--line)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;height:100%}
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation;overflow:hidden}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   background:var(--card); color:var(--ink); overscroll-behavior-y:none;
-  height:100vh; display:flex; flex-direction:column; overflow:hidden;
+  height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden;
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input,select,textarea{font-family:inherit;font-size:16px}
@@ -592,7 +592,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 94 · 2026-09-26</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 95 · 2026-09-26</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2277,7 +2277,12 @@ function switchTab(t){
   renderAll();
   { const _m=document.querySelector("main"); if(_m) _m.scrollTop=0; }
 }
-$$(".tabbtn").forEach(b=>b.addEventListener("click",()=>switchTab(b.dataset.tab)));
+$$(".tabbtn").forEach(b=>b.addEventListener("click",()=>{ switchTab(b.dataset.tab); _pinPage(); }));
+// iOS: a double-tap or the keyboard closing can scroll the whole page and leave a blank gap. Keep the page pinned.
+function _pinPage(){ const a=document.activeElement; if((window.scrollY||document.documentElement.scrollTop||document.body.scrollTop) && !(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))){ window.scrollTo(0,0); document.body.scrollTop=0; } }
+window.addEventListener("scroll", _pinPage, {passive:true});
+document.addEventListener("focusout", function(){ setTimeout(_pinPage, 150); });
+window.addEventListener("resize", function(){ setTimeout(_pinPage, 150); });
 /* flex shell — no manual sizing needed */
 
 /* ============================================================
