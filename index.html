@@ -13,6 +13,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PantryHub">
+<script>try{ if(navigator.standalone || (window.matchMedia && matchMedia("(display-mode: standalone)").matches)) document.documentElement.classList.add("pwa"); }catch(e){}</script>
 <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22PantryHub%22%2C%22short_name%22%3A%22PantryHub%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%23f4f6f2%22%2C%22theme_color%22%3A%22%232e7d32%22%2C%22start_url%22%3A%22.%2F%22%7D">
 <!-- Apply saved theme before paint (no flash) -->
 <script>try{var _t=localStorage.getItem('pantry_theme')||'system';var _d=_t==='dark'||(_t==='system'&&window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.setAttribute('data-theme',_d?'dark':'light');}catch(e){}</script>
@@ -46,12 +47,15 @@
 :root[data-theme="dark"] .btn.dzlink{border-color:var(--line)}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;padding:0;height:100%}
-html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation;overflow:hidden}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;touch-action:manipulation;overflow:hidden;background:var(--card)}
 body{
   font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   background:var(--card); color:var(--ink); overscroll-behavior-y:none;
   height:100vh; height:100dvh; display:flex; flex-direction:column; overflow:hidden;
 }
+/* Home-screen app: the full screen height reaches the real bottom (the "visible height" unit comes up short there) */
+html.pwa body{height:100vh}
+html.pwa #camView{bottom:auto;height:100vh}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input,select,textarea{font-family:inherit;font-size:16px}
 
@@ -592,7 +596,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 95 · 2026-09-26</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 96 · 2026-09-26</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2283,6 +2287,12 @@ function _pinPage(){ const a=document.activeElement; if((window.scrollY||documen
 window.addEventListener("scroll", _pinPage, {passive:true});
 document.addEventListener("focusout", function(){ setTimeout(_pinPage, 150); });
 window.addEventListener("resize", function(){ setTimeout(_pinPage, 150); });
+// Camera watchdog: a shutter press always closes the camera. If it's still open 2.5s later, close it so no one is ever stuck.
+let _camSession=0;
+$("#camShutter").addEventListener("click", function(){
+  const sid=_camSession;
+  setTimeout(function(){ if(_camSession===sid && camView.style.display!=="none"){ closeCamera(); rapidMode=false; grocLoop=false; chainDate=false; toast("Camera error. Please try again.","warn"); } }, 2500);
+});
 /* flex shell — no manual sizing needed */
 
 /* ============================================================
@@ -2986,7 +2996,7 @@ let camTrack=null, torchAvail=false, torchOn=false, torchTimer=null;
 const camView=$("#camView"), camVideo=$("#camVideo");
 
 async function openCamera(mode){
-  camMode=mode;
+  camMode=mode; _camSession++;
   $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":mode==="name"?"NAME + PHOTO":"PHOTO";
   $("#camHint").textContent = mode==="barcode"?"Fill the box with the barcode • for round jars keep it centred & flat-on":
     mode==="date"?"Frame the printed date inside the box, hold steady, then tap the shutter":
@@ -3671,6 +3681,11 @@ function captureDateRegion(soft){
 
 /* ----- AI expiry-date reading via Gemini (used when window.GEMINI is set) ----- */
 // A plain colour crop of the scan box — the AI reads a normal photo better than a thresholded one.
+function captureFrameForAI(){   // full colour frame, max 1024px — plenty for reading labels, and lighter on the scan limit
+  const v=camVideo, vw=v.videoWidth||1280, vh=v.videoHeight||720, sc=Math.min(1, 1024/Math.max(vw,vh));
+  const c=document.createElement("canvas"); c.width=Math.round(vw*sc); c.height=Math.round(vh*sc);
+  c.getContext("2d").drawImage(v,0,0,c.width,c.height); return c.toDataURL("image/jpeg",0.85);
+}
 function captureDateRegionRaw(){
   const v=camVideo, vw=v.videoWidth||1280, vh=v.videoHeight||720;
   // Send the FULL frame to the AI - it locates the date anywhere on the label,
