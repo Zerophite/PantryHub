@@ -440,7 +440,7 @@ body.viewonly .vobadge{display:block}
       <div class="chipbtns">
         <button class="chip" id="chipGoogleImg" style="display:none">🔎 Search Google Images</button>
         <button class="chip" id="chipPasteImg">📋 Paste image</button>
-        <button class="chip" id="chipReadName">🔤 Scan the name</button>
+        <button class="chip" id="chipReadName">📸 Snap name &amp; photo</button>
         <button class="chip" id="chipPhoto">⬆️ Add your own photo</button>
         <button class="chip" id="chipKeepPhoto" style="display:none">✅ Keep this photo</button>
       </div>
@@ -592,7 +592,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 89 · 2026-09-25</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 92 · 2026-09-25</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2919,7 +2919,7 @@ function resolveItemPhoto(id, bc, name){
 }
 function showPhoto(url){
   const pv=$("#photoPreview"), hint=$("#photoHint");
-  const show=u=>{ pv.src=u; pv.style.display="block"; hint.textContent=pendingPhotoTemp?"📸 Temporary photo from the label — the admin can replace it":(isAdmin()?"Tap “Add photo” to replace":""); const kp=$("#chipKeepPhoto"); if(kp) kp.style.display=(pendingPhotoTemp&&isAdmin())?"":"none"; };
+  const show=u=>{ pv.src=u; pv.style.display="block"; hint.textContent=pendingPhotoTemp?"Temporary photo. Pending admin review.":(isAdmin()?"Tap “Add photo” to replace":""); const kp=$("#chipKeepPhoto"); if(kp) kp.style.display=(pendingPhotoTemp&&isAdmin())?"":"none"; };
   if(typeof url==="string" && (url.startsWith("data:")||url.startsWith("http"))){ show(url); return; }
   pv.style.display="none"; pv.removeAttribute("src"); hint.textContent="🖼️ No photo yet"; { const kp=$("#chipKeepPhoto"); if(kp) kp.style.display="none"; }
   if(url==="L"){ hint.textContent="Loading photo…";
@@ -2942,9 +2942,14 @@ function toThumb(imgOrCanvas,max=360,q=0.62){
 const fileInput=document.createElement("input");
 fileInput.type="file"; fileInput.accept="image/*"; fileInput.capture="environment"; fileInput.style.display="none";
 document.body.appendChild(fileInput);
-$("#chipKeepPhoto") && $("#chipKeepPhoto").addEventListener("click",()=>{ if(!isAdmin()) return; pendingPhotoTemp=false; showPhoto(pendingPhoto); toast("✅ Photo kept — Save to use it for this product from now on","good"); });
+$("#chipKeepPhoto") && $("#chipKeepPhoto").addEventListener("click",()=>{ if(!isAdmin()) return; pendingPhotoTemp=false; showPhoto(pendingPhoto); toast("Photo kept. Save to apply.","good"); });
 $("#chipPhoto").addEventListener("click",()=>{ if(!isAdmin()){ toast("Only the admin can change photos","warn"); return; } photoMode="photo"; fileInput.click(); });
-$("#chipReadName").addEventListener("click",()=>{ openCamera("name"); });
+$("#chipReadName").addEventListener("click",()=>{
+  const hasName=!!$("#fName").value.trim(), hasPhoto=!!pendingPhoto && !pendingPhotoTemp;
+  if(hasName && hasPhoto){ toast(isAdmin()?"Name and photo already added. Use Add your own photo to replace it.":"Name and photo already added.","good"); return; }
+  if(!hasName && (!window.GEMINI || _nameQuotaOut())){ snapThenType=true; toast(window.GEMINI?"Daily name scan limit reached. Take a photo, then enter the name.":"Take a photo, then enter the name.","good"); openCamera("snap"); return; }
+  openCamera(hasName ? "snap" : "name");
+});
 let photoMode="photo";
 fileInput.addEventListener("change",()=>{
   const f=fileInput.files[0]; if(!f) return;
@@ -2964,13 +2969,14 @@ const camView=$("#camView"), camVideo=$("#camVideo");
 
 async function openCamera(mode){
   camMode=mode;
-  $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":mode==="name"?"PRODUCT NAME":"PHOTO";
+  $("#camModeLabel").textContent = mode==="barcode"?"BARCODE":mode==="date"?"EXPIRY DATE":mode==="name"?"NAME + PHOTO":"PHOTO";
   $("#camHint").textContent = mode==="barcode"?"Fill the box with the barcode • for round jars keep it centred & flat-on":
     mode==="date"?"Frame the printed date inside the box, hold steady, then tap the shutter":
-    mode==="name"?(window.GEMINI?"Show the front of the product — logo and name in view (the whole pack is fine). Hold steady, then tap the shutter":"Frame the product NAME inside the box, hold steady, then tap the shutter"):"Tap to capture";
+    mode==="snap"?"Take a photo of the product.":
+    mode==="name"?(window.GEMINI?"Center the front of the package, then tap the shutter.":"Frame the product NAME inside the box, hold steady, then tap the shutter"):"Tap to capture";
   $("#camHint").classList.remove("scanning");
-  $("#camScanBox").style.display = (mode==="photo" || (mode==="name" && window.GEMINI))?"none":"block";
-  { const sk=$("#camSkipDate"); if(sk) sk.style.display = (mode==="date")?"block":"none"; }
+  $("#camScanBox").style.display = (mode==="photo" || mode==="snap" || (mode==="name" && window.GEMINI))?"none":"block";
+  { const sk=$("#camSkipDate"); if(sk){ sk.style.display = (mode==="date"||mode==="snap")?"block":"none"; sk.textContent = mode==="snap"?"⏭️ Skip photo":"⏭️ No date — skip"; } }
   $("#camScanBox").classList.remove("scanning");
   try{
     // Ask for a sharp rear-camera feed; fall back to a basic request if the device refuses it
@@ -2987,7 +2993,6 @@ async function openCamera(mode){
     camView.style.display="flex";
     if(mode==="barcode"){ startBarcodeScan(); scheduleAutoTorch(); }
     if(mode==="date" && !window.GEMINI) getOcrWorker().catch(()=>{});   // warm offline reader (skip if AI is on)
-    if(mode==="name") getNameOcrWorker().catch(()=>{});                 // warm the on-device text reader
   }catch(err){
     toast("Camera unavailable — use Add photo instead","warn");
     photoMode=(mode==="name")?"identify":mode; fileInput.click();
@@ -3043,6 +3048,7 @@ function _camCloseSmart(){ const dateStep=(camMode==="date"); closeCamera(); rap
   if(!$("#fName").value.trim()) closeItemSheet();
 }
 $("#camSkipDate") && $("#camSkipDate").addEventListener("click",()=>{
+  if(camMode==="snap"){ closeCamera(); _afterSnap(); return; }
   $("#fExp").value=""; if(typeof fillSelectsFromExp==="function") fillSelectsFromExp();
   const wasRapid=rapidMode, wasGroc=grocExpiryId; closeCamera();
   if(wasGroc){ grocExpiryId=null; toast("No date — skipped","good"); grocScanNext(); return; }
@@ -3224,101 +3230,51 @@ async function aiReadName(dataUrl){
   if(!j.name){ if(j.error) throw new Error(String(j.error).slice(0,140)); return null; }
   return {name:String(j.name).replace(/\s+/g," ").trim(), category:j.category||null};
 }
-function _fixOcrWord(w){ const L=(w.match(/[A-Za-z]/g)||[]).length; if(L < w.length*0.6) return w; return w.replace(/0/g,"O").replace(/1/g,"I").replace(/5/g,"S").replace(/8/g,"B").replace(/\|/g,"I"); }
-function fixOcrText(t){ return (t||"").split("\n").map(function(l){ return l.split(/\s+/).map(_fixOcrWord).join(" "); }).join("\n"); }
-let _ocrVocab=null, _ocrVocabAt=0;
-function ocrVocab(){   // words the app already knows: your items, remembered products, brands, food words
-  if(_ocrVocab && Date.now()-_ocrVocabAt<60000) return _ocrVocab;
-  const v=new Set(); const add=function(x){ normName(x).split(" ").forEach(function(w){ if(w.length>=4 && !/\d/.test(w)) v.add(w); }); };
-  (state.items||[]).forEach(function(i){ add(i.name); });
-  try{ const p=getProducts(); Object.keys(p).forEach(function(k){ if(p[k] && p[k].name) add(p[k].name); }); }catch(e){}
-  try{ _BRAND_WORDS.forEach(function(w){ if(w.length>=4) v.add(w); }); }catch(e){}
-  try{ CAT_RULES.forEach(function(r){ r[0].forEach(add); }); }catch(e){}
-  _ocrVocab=v; _ocrVocabAt=Date.now(); return v;
-}
-function _lev(a,b){ if(a===b) return 0; const m=a.length,n=b.length; if(Math.abs(m-n)>2) return 9; let p=[]; for(let j=0;j<=n;j++) p[j]=j; for(let i=1;i<=m;i++){ const c=[i]; for(let j=1;j<=n;j++){ c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1)); } p=c; } return p[n]; }
-function correctWithVocab(name){   // snap misread words to the closest known word ("KIKKOHAN" -> "kikkoman")
-  const V=ocrVocab(); let hits=0, words=0;
-  const out=(name||"").split(" ").map(function(w){
-    const lw=w.toLowerCase(); if(lw.length<4) return w; words++;
-    if(V.has(lw)){ hits++; return w; }
-    if(lw.length<6) return w;                       // short words are too easy to mis-snap (real -> meal, sings -> wings)
-    const tol=lw.length>=8?2:1; let best=null, bd=9;
-    V.forEach(function(v){ if(Math.abs(v.length-lw.length)>tol) return; const d=_lev(lw,v); if(d<bd){ bd=d; best=v; } });
-    if(best && bd<=tol){ hits++; return best; }
-    return w;
-  });
-  return {name:titleCase(out.join(" ").toLowerCase()), score:words?hits/words:0};
-}
-function invertDataUrl(u){ return new Promise(function(res){ const im=new Image(); im.onload=function(){ try{ const c=document.createElement("canvas"); c.width=im.naturalWidth; c.height=im.naturalHeight; const x=c.getContext("2d"); x.drawImage(im,0,0); const d=x.getImageData(0,0,c.width,c.height), D=d.data; for(let i=0;i<D.length;i+=4){ D[i]=255-D[i]; D[i+1]=255-D[i+1]; D[i+2]=255-D[i+2]; } x.putImageData(d,0,0); res(c.toDataURL("image/jpeg",0.9)); }catch(e){ res(null); } }; im.onerror=function(){ res(null); }; im.src=u; }); }
-// On-device fallback: favour the BIGGEST text on the pack (brand / product name), ignore fine print,
-// and only return a name we're reasonably sure about — never a jumble.
-const _NAME_NOISE=/(net\s*wt|net\s*weight|nutrition|ingredient|calorie|serving|\bper\b|best before|\bexp\b|distributed|manufactured|product of|keep refrigerated|refrigerate|www\.|\.com|\.ca|store in|contains|allergen|fl\s*oz|\d+\s*(g|kg|mg|ml|l|lb|oz)\b|caplets?|tablets?|capsules?)/i;
-async function _ocrLines(worker, src, psm){
-  try{
-    await worker.setParameters({tessedit_pageseg_mode:psm});
-    const r=await worker.recognize(src, {}, {text:true, blocks:true});
-    const d=(r&&r.data)||{}; const lines=(d.lines||[]).slice();
-    if(!lines.length && d.blocks) d.blocks.forEach(function(b){ (b.paragraphs||[]).forEach(function(p){ (p.lines||[]).forEach(function(l){ lines.push(l); }); }); });
-    return lines.map(function(l,i){ return {i:i, text:(l.text||"").trim(), conf:+l.confidence||0, h:l.bbox?Math.max(0,l.bbox.y1-l.bbox.y0):0}; });
-  }catch(e){ return []; }
-}
-function _pickNameFromLines(lines){
-  const clean=lines.map(function(l){
-    const t=fixOcrText(l.text.normalize("NFD").replace(/[\u0300-\u036f]/g,"")).replace(/[^A-Za-z0-9&'\- ]+/g," ").replace(/\s+/g," ").trim();
-    return {i:l.i, t:t, conf:l.conf, h:l.h};
-  }).filter(function(l){
-    const letters=(l.t.match(/[A-Za-z]/g)||[]).length, digits=(l.t.match(/\d/g)||[]).length;
-    return l.t && letters>=3 && digits<=letters/3 && l.conf>=45 && !_NAME_NOISE.test(l.t) && l.t.split(" ").length<=6;
-  });
-  if(!clean.length) return null;
-  const maxH=Math.max.apply(null, clean.map(function(l){ return l.h; }));
-  const big=clean.filter(function(l){ return l.h>=maxH*0.6; }).sort(function(a,b){ return b.h-a.h; }).slice(0,2).sort(function(a,b){ return a.i-b.i; });
-  const words=[]; big.forEach(function(l){ l.t.split(" ").forEach(function(w){ if(w && words.length<6) words.push(w); }); });
-  if(!words.length) return null;
-  const conf=big.reduce(function(sum,l){ return sum+l.conf; },0)/big.length;
-  const c=correctWithVocab(words.join(" "));
-  return {name:c.name, conf:conf, score:c.score};
-}
-async function ocrNameMulti(img){
-  const worker=await getNameOcrWorker(); let best=null;
-  const done=function(v){ try{ worker.setParameters({tessedit_pageseg_mode:"3"}); }catch(e){} return v; };
-  const consider=function(lines){ const p=_pickNameFromLines(lines); if(!p) return; const q=p.conf/100+p.score; if(!best || q>best.q) best={name:p.name, conf:p.conf, score:p.score, q:q}; };
-  const sure=function(){ return best && (best.conf>=75 || best.score>=0.5); };
-  consider(await _ocrLines(worker, img, "3"));  if(sure()) return done(best.name);
-  consider(await _ocrLines(worker, img, "11")); if(sure()) return done(best.name);    // sparse text: logos / scattered words
-  const inv=await invertDataUrl(img); if(inv) consider(await _ocrLines(worker, inv, "11"));   // light text on a dark band
-  return done(sure() ? best.name : null);
-}
 let _aiLastErr="";
 async function readProductName(ocrImg, aiImg){
   _aiLastErr="";
-  if(window.GEMINI && !_aiNameOff()){
-    try{ const a=await aiReadName(aiImg||ocrImg); if(a && a.name) return {name:a.name, category:a.category, via:"ai"}; }
-    catch(e){ _aiLastErr=/quota|exceeded|429|rate.?limit/i.test((e&&e.message)||"")?"quota":"error"; }
-    if(_aiLastErr==="quota") toast("AI daily limit reached — reading on the phone instead (less accurate)…","good");
-  }
-  const nm=await ocrNameMulti(ocrImg);
-  return nm ? {name:nm, via:"ocr"} : null;
+  if(!window.GEMINI || _aiNameOff()){ _aiLastErr="off"; return null; }
+  if(_nameQuotaOut()){ _aiLastErr="quota"; return null; }                    // limit used up: the user enters the name
+  try{ const a=await aiReadName(aiImg||ocrImg); if(a && a.name) return {name:a.name, category:a.category, via:"ai"}; }
+  catch(e){ _aiLastErr=/quota|exceeded|429|rate.?limit/i.test((e&&e.message)||"")?"quota":"error"; }
+  if(_aiLastErr==="quota") _nameQuotaAt=Date.now();
+  return null;                                                                // no guessing: "Name not recognized"
 }
 function _nameFailMsg(){
-  return _aiLastErr==="quota" ? "AI limit reached and the label wasn't clear enough to read on the phone — please type the name."
-       : "Couldn't read the name clearly — tap 🔤 Scan the name to try again, or type it.";
+  return _aiLastErr==="quota" ? "Daily name scan limit reached. Please enter the name manually."
+       : "Name not recognized. Try again or enter it manually.";
 }
 function fillReadName(res){
   const nm=res.name;
-  // A phone-only (non-AI) reading is a guess on logo-heavy packs — ask before filling it in.
-  if(res.via!=="ai" && !confirm((_aiLastErr==="quota"?"The AI's daily limit is used up, so I read the label on the phone.":"I read the label on the phone (no AI).")+"\n\nI think it says: \""+nm+"\"\n\nUse this name?")){ toast("OK — type the name instead","warn"); return; }
   $("#fName").value=nm; $("#fName").dispatchEvent(new Event("input")); $("#fName").dispatchEvent(new Event("blur"));
   // your category rules win; the AI's pick only fills in when no rule matches
   if(res.category && !catTouched && !autoCategoryStrict(nm) && CAT_ORDER.includes(res.category)){ setCatSelect(res.category); const t=$("#autoCatTag"); if(t) t.textContent=" → auto: "+res.category; }
   upgradePhotoByName();
-  toast((res.via==="ai"?"✨ ":"✓ ")+'Read: "'+nm+'" — fix any mistakes',"good");
+  toast('Name detected: "'+nm+'"',"good");
 }
 // Keep a snapshot as a TEMPORARY photo (only when there's no photo yet). The admin can replace or keep it.
 function setTempPhoto(d){
   if(!d || !itemScrim.classList.contains("on") || pendingPhoto) return;
   pendingPhoto=d; pendingPhotoTemp=true; showPhoto(d);
+}
+// ----- Quick photo ("snap") + what happens after a barcode is found -----
+let snapThenDate=false, snapThenType=false;
+let _nameQuotaAt=0;   // when name scanning last hit its daily limit (we stop trying for 15 minutes)
+function _nameQuotaOut(){ return _nameQuotaAt && Date.now()-_nameQuotaAt < 15*60000; }
+function _afterSnap(){
+  if(snapThenType){ snapThenType=false; if(!$("#fName").value.trim()){ toast("Please enter the item name.","good"); setTimeout(function(){ try{ $("#fName").focus(); }catch(e){} },300); } }
+  if(snapThenDate){ snapThenDate=false; setTimeout(function(){ if($("#itemScrim").classList.contains("on") && camView.style.display==="none") openCamera("date"); },450); }
+}
+// A barcode was found: if it came with no picture (and we have none saved), take a quick photo, then carry on to the expiry date.
+function afterBarcodeNext(imgUrl){
+  const wantDate=chainDate; chainDate=false;
+  const go=function(mode){ setTimeout(function(){ if($("#itemScrim").classList.contains("on") && camView.style.display==="none") openCamera(mode); },450); };
+  if(imgUrl || pendingPhoto){ if(wantDate) go("date"); return; }
+  rememberedPhotoFor(pendingBarcode, ($("#fName").value||"")).then(function(d){
+    if(!$("#itemScrim").classList.contains("on")) return;
+    if(d || pendingPhoto){ if(wantDate) go("date"); return; }          // a saved photo is used instead
+    snapThenDate=wantDate; toast("No product image found. Take a photo or skip.","good"); go("snap");
+  }).catch(function(){ if(wantDate) go("date"); });
 }
 // After a name is read: if the admin already has a photo for this product, use it instead of a temporary one.
 function upgradePhotoByName(){
@@ -3344,31 +3300,8 @@ async function identifyPhoto(dataUrl, thumb){
   try{
     const res=await readProductName(dataUrl, dataUrl);
     if(res && res.name) fillReadName(res);
-    else toast(_nameFailMsg(),"warn");
-  }catch(e){ toast("Couldn't read the label — type the name (photo kept)","warn"); }
-}
-// Pick the most product-name-like line out of raw label OCR
-function guessNameFromLabel(raw){
-  const noise=/(net\s*wt|net\s*weight|nutrition|ingredient|calorie|serving|\bper\b|best before|\bexp\b|distributed|manufactured|product of|keep refrigerated|refrigerate|www\.|\.com|\.ca|store in|contains|allergen|fl\s*oz|\d+\s*(g|kg|oz|ml|l|lb)\b)/i;
-  const lines=(raw||"").replace(/\r/g," ").split(/\n+/).map(s=>s.replace(/[^A-Za-z0-9&'\- ]+/g," ").replace(/\s+/g," ").trim()).filter(Boolean);
-  const scored=[];
-  lines.forEach((ln,idx)=>{
-    if(noise.test(ln)) return;
-    const letters=(ln.match(/[A-Za-z]/g)||[]).length;
-    const digits=(ln.match(/\d/g)||[]).length;
-    const words=ln.split(" ").filter(w=>w.length>1);
-    if(letters<3||ln.length>46||words.length<1||words.length>6) return;
-    let score=letters - digits*3 + (words.length>=2?5:0);
-    if(/^[A-Z0-9 &'\- ]+$/.test(ln)) score+=8;   // all-caps = usually the product name
-    scored.push({ln,idx,score});
-  });
-  if(!scored.length) return null;
-  const bestL=scored.slice().sort((a,b)=>b.score-a.score)[0];
-  // keep the strong lines (within 55% of the best), in reading order, and join them into one name
-  const picks=scored.filter(x=>x.score>=bestL.score*0.45).sort((a,b)=>a.idx-b.idx);
-  let ws=[]; for(const p of picks){ for(const w of p.ln.split(" ")){ if(w) ws.push(w); if(ws.length>=7) break; } if(ws.length>=7) break; }
-  const nm=ws.join(" ").trim();
-  return nm?titleCase(nm.toLowerCase()):null;
+    else { toast(_nameFailMsg(),"warn"); if(_aiLastErr==="quota") setTimeout(()=>{ try{ $("#fName").focus(); }catch(e){} },300); }
+  }catch(e){ toast("Unable to read the label. Please enter the name manually.","warn"); }
 }
 let scanTarget="pantry";
 function fetchT(url,opts,ms){ ms=ms||6000; var c=(typeof AbortController!=="undefined")?new AbortController():null; var t=c?setTimeout(function(){ try{ c.abort(); }catch(e){} },ms):null; var o=Object.assign({},opts||{}); if(c) o.signal=c.signal; return fetch(url,o).finally(function(){ if(t) clearTimeout(t); }); }
@@ -3510,7 +3443,7 @@ async function groceryScanBarcode(code){
     if(_core){
       const cand=groceryMatchFor(info.name);
       if(cand){
-        if(confirm(`Scanned: “${info.name}”.\n\nThis looks like “${cand.name}” on your grocery list — same item, different brand.\n\nMark it bought and stock it in your pantry?`)){
+        if(confirm(`Scanned: “${info.name}”\n\nMatches “${cand.name}” on your grocery list.\n\nCheck it off?`)){
           fulfillGroceryLine(cand, info, code);
         } else { grocScanNext(); }
         return;
@@ -3586,13 +3519,18 @@ async function lookupBarcode(code){
     }
   }catch(e){}
   try{ const x=await lookupExtraDBs(code); if(myGen!==scanGen) return;
-    if(x && x.name){ applyBarcodeResult(x.name, null, x.photo||null); rememberProduct(code,{name:x.name, category:$("#fCat").value, photo:x.photo||null}); toast("✓ Found in "+x.src,"good"); return; } }catch(e){}
+    if(x && x.name){ applyBarcodeResult(x.name, null, x.photo||null); rememberProduct(code,{name:x.name, category:$("#fCat").value, photo:x.photo||null}); toast("Product found.","good"); return; } }catch(e){}
   if(myGen!==scanGen) return;
   const bf=$("#fBarcode"); if(bf && !bf.value.trim()) bf.value=code;   // fill the scanned number automatically
-  toast(isAdmin()?"Not in the database — its barcode is filled in. Type the name + add a photo, then Save to share it.":"Not in the database — its barcode is filled in. Snap the front of the product and I'll read its name.","warn");
+  toast(isAdmin()?"Product not found. Barcode saved. Enter the name and add a photo, then save to share it.":"Product not found. Barcode saved.","warn");
   rapidMode=false;   // this item needs attention — stop the hands-free loop
   setTimeout(()=>{ if(!$("#itemScrim").classList.contains("on")) return;
-    if(confirm("Couldn't find this item in the databases.\n\nTap OK and point the camera at the front of the product. I'll read its name and keep the picture as the item's photo for now.\n\n(Or press Cancel and type the name yourself.)")){ openCamera("name"); }
+    if(!window.GEMINI || _nameQuotaOut()){
+      if(confirm((window.GEMINI?"Product not found. The daily name scan limit has been reached.":"Product not found.")+"\n\nTap OK to take a photo, then enter the name manually.")){ snapThenType=true; snapThenDate=false; openCamera("snap"); }
+      else setTimeout(()=>{ try{ $("#fName").focus(); }catch(e){} },300);
+      return;
+    }
+    if(confirm("Product not found.\n\nTap OK to scan the front of the package. The name and photo will be added automatically.\n\nTap Cancel to enter it manually.")){ openCamera("name"); }
   }, 250);
 }
 // Fill the add-item form from a barcode result
@@ -3611,7 +3549,7 @@ function applyBarcodeResult(nm, catGuess, imgUrl){
   upgradePendingPhoto(pendingBarcode);
   updateFreshInfo();
   toast("✓ Detected: "+nm,"good");
-  if(chainDate){ chainDate=false; setTimeout(()=>{ if($("#itemScrim").classList.contains("on")) openCamera("date"); }, 450); }
+  afterBarcodeNext(imgUrl);
 }
 // Find a product photo by name (Open Food Facts search). Name matching is approximate — user confirms by saving.
 async function findImageByName(){
@@ -3667,8 +3605,12 @@ $("#camShutter").addEventListener("click",async()=>{
       else { toast("Couldn't read the date — tap it below, then Save & scan next","warn"); }
     }
     if(grocExpiryId){ const _g=getItem(grocExpiryId); const _e=$("#fExp").value; if(_g){ _g.exp=_e||null; save(); renderAll(); } grocExpiryId=null; $("#fExp").value=""; toast(_e?("📅 Expiry set: "+_e):"No date read — you can add it later","good"); grocScanNext(); }
+  }else if(camMode==="snap"){
+    const t=toThumb(camVideo,420,0.62); closeCamera(); if(pendingPhotoTemp) pendingPhoto=null; setTempPhoto(t);
+    toast(pendingPhoto===t?"Photo added.":"Photo captured.","good");
+    _afterSnap();
   }else if(camMode==="name"){
-    const shot=captureNameRegion(), full=captureFrameForAI(), thumb=toThumb(camVideo,420,0.62); closeCamera(); setTempPhoto(thumb); await readNameLive(shot, full);
+    const full=captureFrameForAI(), thumb=toThumb(camVideo,420,0.62); closeCamera(); setTempPhoto(thumb); await readNameLive(full, full);
     if(chainDate && $("#fName").value.trim()){ chainDate=false; setTimeout(()=>{ if($("#itemScrim").classList.contains("on")) openCamera("date"); }, 600); }
   }else{
     if(!isAdmin()){ closeCamera(); toast("Only the admin can change photos","warn"); return; }
@@ -3681,8 +3623,8 @@ async function readNameLive(dataUrl, fullColor){
   try{
     const res=await readProductName(dataUrl, fullColor||dataUrl);
     if(res && res.name) fillReadName(res);
-    else toast(_nameFailMsg(),"warn");
-  }catch(e){ toast("Couldn't read the label — type the name","warn"); }
+    else { toast(_nameFailMsg(),"warn"); if(_aiLastErr==="quota") setTimeout(()=>{ try{ $("#fName").focus(); }catch(e){} },300); }
+  }catch(e){ toast("Unable to read the label. Please enter the name manually.","warn"); }
 }
 
 // Crop to the on-screen scan box and upscale 3×. Two modes: crisp (hard black/white, best for
@@ -3720,25 +3662,6 @@ function captureDateRegionRaw(){
   c.getContext("2d").drawImage(v, 0,0, c.width,c.height);
   return c.toDataURL("image/jpeg",0.9);
 }
-// Crop to the on-screen box and upscale — reads a framed product name far better than the whole glossy pack.
-function captureFrameForAI(){   // full colour frame, max 1024px — plenty for reading labels, and lighter on your AI quota
-  const v=camVideo, vw=v.videoWidth||1280, vh=v.videoHeight||720, sc=Math.min(1, 1024/Math.max(vw,vh));
-  const c=document.createElement("canvas"); c.width=Math.round(vw*sc); c.height=Math.round(vh*sc);
-  c.getContext("2d").drawImage(v,0,0,c.width,c.height); return c.toDataURL("image/jpeg",0.85);
-}
-function captureNameRegion(){
-  const v=camVideo, vw=v.videoWidth||1280, vh=v.videoHeight||720;
-  const bx=Math.round(vw*0.05), by=Math.round(vh*0.20), bw=Math.round(vw*0.90), bh=Math.round(vh*0.52);
-  const scale=2.6;
-  const c=document.createElement("canvas"); c.width=Math.round(bw*scale); c.height=Math.round(bh*scale);
-  const ctx=c.getContext("2d"); ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality="high";
-  ctx.drawImage(v, bx,by,bw,bh, 0,0,c.width,c.height);
-  try{ const img=ctx.getImageData(0,0,c.width,c.height),D=img.data;
-    for(let i=0;i<D.length;i+=4){ let g=0.299*D[i]+0.587*D[i+1]+0.114*D[i+2]; g=(g-128)*1.4+128; g=g<0?0:g>255?255:g; D[i]=D[i+1]=D[i+2]=g; }
-    ctx.putImageData(img,0,0);
-  }catch(e){}
-  return c.toDataURL("image/jpeg",0.92);
-}
 async function geminiReadDate(dataUrl){
   const b64=dataUrl.split(",")[1];
   const mime=dataUrl.slice(5, dataUrl.indexOf(";"));
@@ -3763,7 +3686,7 @@ async function geminiDate(dataUrl){
   }catch(e){
     // AI unavailable (out of quota / offline) -> fall back to on-device reading
     const q=/quota|billing|exceeded|429/i.test((e&&e.message)||"");
-    toast(q?"AI daily limit reached — reading on-device…":"AI unavailable — reading on-device…","good");
+    toast(q?"Daily expiry scan limit reached. Using on-device reading.":"Expiry scanner unavailable. Using on-device reading.","good");
     return ocrDate(dataUrl);
   }
 }
@@ -3791,19 +3714,6 @@ function getOcrWorker(){
     ocrWorker=w; return w;
   })();
   return ocrWorkerP;
-}
-// A second worker tuned for reading product NAMES: no digit whitelist, auto page segmentation.
-let nameOcrWorker=null, nameOcrWorkerP=null;
-function getNameOcrWorker(){
-  if(nameOcrWorker) return Promise.resolve(nameOcrWorker);
-  if(nameOcrWorkerP) return nameOcrWorkerP;
-  nameOcrWorkerP=(async()=>{
-    await loadTesseract();
-    const w=await Tesseract.createWorker("eng");
-    try{ await w.setParameters({tessedit_pageseg_mode:"3"}); }catch(e){}
-    nameOcrWorker=w; return w;
-  })();
-  return nameOcrWorkerP;
 }
 // Reject nonsense reads (e.g. "2035") — a real best-before is within a sane window of today.
 function plausibleExpiry(iso){
