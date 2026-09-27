@@ -596,7 +596,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 96 · 2026-09-26</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 97 · 2026-09-27</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -1400,6 +1400,9 @@ function itemThumb(it){
 // keyword -> category (first match wins; broad-word overrides listed first)
 const CAT_RULES=[
   // --- overrides: stop broad words (chicken/beef/fish/potato/cream/orange) stealing the match ---
+  [["protein powder","whey","creatine","pre-workout","bcaa","supplement"],"Supplements"],
+  [["cake mix","brownie mix","muffin mix","cookie mix","pancake mix","waffle mix","baking mix","baking soda","baking powder","cocoa powder","bread flour"],"Baking"],
+  [["popcorn chicken","chicken nugget"],"Proteins"],
   [["ice cream","gelato","sorbet","popsicle","frozen yogurt","frozen meal","frozen dinner","frozen pizza","frozen waffle"],"Snacks"],
   [["bouillon","stock cube","beef cube","pork cube","chicken cube","maggi cube","knorr cube"],"Spices & Seasonings"],
   [["chicken stock","beef stock","vegetable stock","fish stock","chicken broth","beef broth","bone broth"],"Canned & Jarred"],
@@ -1415,6 +1418,16 @@ const CAT_RULES=[
   [["coconut milk"],"Canned & Jarred"],
   [["bell pepper"],"Fruits & Vegetables"],
   [["potato starch","corn starch","cornstarch","tapioca starch","potato flour"],"Baking"],
+  [["spaghetti squash"],"Fruits & Vegetables"],
+  // --- PRODUCT TYPES: what the product IS beats what it tastes like (coffee crisp BAR, chicken SEASONING, sour cream & onion CHIPS) ---
+  [["chocolate milk","almond milk","oat milk","soy milk","rice milk","cashew milk"],"Dairy & Refrigerated"],
+  [["milk tea","hot chocolate","hot cocoa","iced tea","iced coffee","cold brew","latte","frappuccino","energy drink","sports drink","=drink","=drinks","beverage","=soda","soft drink","kombucha","lemonade","coca-cola","coca cola","pepsi","sprite","gatorade","red bull","minute maid","fruit punch","pure leaf","arizona","snapple","tropicana","=c2"],"Beverages"],
+  [["tomato sauce","pasta sauce","spaghetti sauce","pizza sauce","marinara","tomato paste","applesauce","apple sauce"],"Canned & Jarred"],
+  [["chocolate syrup","chocolate sauce","caramel sauce","=sauce","=sauces","dressing","=dip"],"Oils, Vinegars & Condiments"],
+  [["seasoning","=rub","spice blend","=spices","breading","batter mix","coating mix"],"Spices & Seasonings"],
+  [["instant noodle","cup noodle","ramen","pancit canton","noodle","tortilla","=bread","bagel"],"Grains & Pasta"],
+  [["chocolate chip","baking chip","butterscotch chip","peanut butter chip"],"Baking"],
+  [["=bar","=bars","=crisp","=crisps","=chip","=chips","candy","candies","gummy","gummies","gummi","lollipop","marshmallow","toffee","truffle","brownie","donut","doughnut","pretzel","popcorn","wafer","snack","cheese puff","cheese curl","pringles","doritos","cheetos","ruffles","tostitos","fritos","=lays","oreo","kit kat","kitkat","snickers","twix","reese","skittles","haribo","smarties","=aero","coffee crisp","mars bar","milk chocolate","dark chocolate","white chocolate","chocolate"],"Snacks"],
   // --- Proteins ---
   [["chicken","beef","pork","turkey"," ham","bacon","sausage","hotdog","hot dog","steak","ribs","chop","lamb","veal","minced beef","minced pork","minced meat","fish ball","fish","salmon","tuna","tilapia","bangus","cod","haddock","pollock","basa","catfish","mahi","shrimp","prawn","crab","squid","sardine","mackerel","anchov","tofu","tempeh","egg","spam","luncheon","pepperoni","salami","bologna"],"Proteins"],
   // --- Dairy & Refrigerated ---
@@ -1451,12 +1464,12 @@ function autoCategory(name){
 // Keyword-only category (no learned prefs) — for re-sorting existing items into the scheme.
 const _kwRe={};
 function _kwHit(n,kw){   // keywords of 4 letters or fewer must be a whole word (plural allowed); longer ones may be part of a word
-  const k=kw.trim(); if(k.length>4) return n.includes(kw);
+  const whole=kw.charAt(0)==="=", k=whole?kw.slice(1):kw.trim(); if(!whole && k.length>4) return n.includes(kw);
   const re=_kwRe[k]||(_kwRe[k]=new RegExp("(^|[^a-z])"+k.replace(/[.*+?^$(){}|[\]\\]/g,"\\$&")+"(e?s)?([^a-z]|$)"));
   return re.test(n);
 }
 function autoCategoryStrict(name){
-  const n=(name||"").toLowerCase();
+  const n=(name||"").toLowerCase().replace(/\b(zero|no|low|reduced|less)[ -]sugars?\b|\bsugar[ -]free\b|\bno sugar added\b/g," ");   // "zero sugar" describes a drink, it is not sugar
   if(/\b(onion|garlic|ginger|chill?i|chile|shallot|scallion)\b/.test(n) && /\b(powder|powdered|granulated|granules?|ground|dried|dehydrated|flakes?|salt|seasoning)\b/.test(n)) return "Spices & Seasonings";  // granulated onion / garlic powder / ground ginger
   if(/\b(lemon|lime|orange|citrus)\b/.test(n) && /\b(pepper|herbs?|seasoning|spice|rub)\b/.test(n)) return "Spices & Seasonings";  // lemon pepper / lemon & herbs seasoning
   for(const [kws,cat] of CAT_RULES){ for(const kw of kws){ if(_kwHit(n,kw)) return cat; } }
@@ -2535,9 +2548,9 @@ $("#fName").addEventListener("input",()=>{
   const nm=$("#fName").value.trim();
   if(nm.length<2){ $("#autoCatTag").textContent=""; return; }
   if(!catTouched){
-    const pref=preferredCategory(nm);                 // your own past choices win
-    const guess=pref||autoCategory(nm);               // else the 11-category auto-sort (new items only)
-    if(guess && guess!=="Other"){ setCatSelect(guess); $("#autoCatTag").textContent = pref?(" · your usual: "+pref):(" · suggested: "+guess); }
+    const exact=(state.catPrefs||{})[nm.toLowerCase()];  // this exact item, placed before, wins
+    const guess=autoCategory(nm);                     // else the product type, then your word habits
+    if(guess && guess!=="Other"){ setCatSelect(guess); $("#autoCatTag").textContent = exact?(" · your usual: "+guess):(" · suggested: "+guess); }
     else $("#autoCatTag").textContent="";
   }
   // live duplicate check
@@ -3275,8 +3288,8 @@ function _nameFailMsg(){
 function fillReadName(res){
   const nm=res.name;
   $("#fName").value=nm; $("#fName").dispatchEvent(new Event("input")); $("#fName").dispatchEvent(new Event("blur"));
-  // your category rules win; the AI's pick only fills in when no rule matches
-  if(res.category && !catTouched && !autoCategoryStrict(nm) && CAT_ORDER.includes(res.category)){ setCatSelect(res.category); const t=$("#autoCatTag"); if(t) t.textContent=" → auto: "+res.category; }
+  // the reader saw the package, so its category wins over keyword rules; your own past choice for this exact item still wins
+  if(res.category && !catTouched && !(state.catPrefs||{})[nm.toLowerCase()] && CAT_ORDER.includes(res.category)){ setCatSelect(res.category); const t=$("#autoCatTag"); if(t) t.textContent=" → auto: "+res.category; }
   upgradePhotoByName();
   toast('Name detected: "'+nm+'"',"good");
 }
@@ -3373,12 +3386,12 @@ async function resolveProduct(code){
   if(cached && (cached.name||cached.photo)) return {name:cached.name||"", category:cached.category||null, photo:cached.photo||null};
   if(window.Products){ try{ const sp=await window.Products.get(code); if(sp && (sp.name||sp.photo)){ const info={name:sp.name||"",category:sp.category||null,photo:sp.photo||null}; rememberProduct(code,info); return info; } }catch(e){} }
   try{
-    const r=await fetchT(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,image_front_small_url`,null,6000);
+    const r=await fetchT(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,categories_tags,image_front_small_url`,null,6000);
     const j=await r.json();
     if(j.status===1 && j.product && (j.product.product_name||j.product.brands)){
       const p=j.product;
       const nm=[p.brands?p.brands.split(",")[0]:"",p.product_name].filter(Boolean).join(" ").trim();
-      const info={name:nm||("Product "+code), category:autoCategory(nm||""), photo:p.image_front_small_url||null};
+      const info={name:nm||("Product "+code), category:((state.catPrefs||{})[(nm||"").toLowerCase()]||offCategory(p.categories_tags)||autoCategory(nm||"")), photo:p.image_front_small_url||null};
       rememberProduct(code, info);
       return info;
     }
@@ -3523,7 +3536,7 @@ async function lookupBarcode(code){
     if(j.status===1 && j.product && (j.product.product_name||j.product.brands)){
       const p=j.product;
       const nm=[p.brands?p.brands.split(",")[0]:"",p.product_name].filter(Boolean).join(" ").trim() || ("Product "+code);
-      applyBarcodeResult(nm, null, p.image_front_small_url);
+      applyBarcodeResult(nm, offCategory(p.categories_tags), p.image_front_small_url);
       rememberProduct(code,{name:nm, category:$("#fCat").value, photo:p.image_front_small_url||null});
       return;
     }
@@ -3562,6 +3575,27 @@ async function lookupBarcode(code){
   }, 250);
 }
 // Fill the add-item form from a barcode result
+// Food database category tags -> our categories (most specific first). Only returns a category that exists in this pantry.
+const OFF_CAT=[
+  [["en:dietary-supplements","en:protein-powders","en:sports-nutrition"],"Supplements"],
+  [["en:ice-creams","en:frozen-desserts","en:chocolate-candies","en:chocolates","en:confectioneries","en:candies","en:biscuits","en:cookies","en:crackers","en:crisps","en:chips","en:chips-and-fries","en:popcorn","en:bars","en:cereal-bars","en:sweet-snacks","en:salty-snacks","en:nut-butters","en:peanut-butters","en:nuts","en:confectionary-based-spreads","en:hazelnut-spreads","en:cocoa-and-hazelnuts-spreads"],"Snacks"],
+  [["en:flours","en:sugars","en:baking-powders","en:leavening-agents","en:baking-mixes","en:baking-decorations","en:cocoa-powders","en:yeasts"],"Baking"],
+  [["en:spices","en:herbs","en:salts","en:seasonings","en:condiment-mixes","en:bouillon-cubes","en:stock-cubes"],"Spices & Seasonings"],
+  [["en:pasta-sauces","en:tomato-sauces","en:canned-tomatoes","en:tomato-pastes","en:soups","en:broths","en:pickles","en:canned-vegetables","en:canned-legumes","en:canned-fruits"],"Canned & Jarred"],
+  [["en:plant-milks","en:dairies","en:milks","en:cheeses","en:yogurts","en:butters","en:creams","en:margarines","en:eggs"],"Dairy & Refrigerated"],
+  [["en:vegetable-oils","en:olive-oils","en:oils","en:vinegars","en:sauces","en:condiments","en:mayonnaises","en:ketchup","en:mustards","en:salad-dressings","en:honeys","en:syrups","en:jams","en:fruit-preserves"],"Oils, Vinegars & Condiments"],
+  [["en:meats","en:poultries","en:fishes","en:seafood","en:sausages","en:hams","en:tofu"],"Proteins"],
+  [["en:canned-foods"],"Canned & Jarred"],
+  [["en:pastas","en:noodles","en:rices","en:breads","en:breakfast-cereals","en:cereal-grains","en:tortillas"],"Grains & Pasta"],
+  [["en:beverages","en:coffees","en:teas","en:juices","en:waters","en:sodas"],"Beverages"],
+  [["en:fresh-fruits","en:fresh-vegetables","en:dried-fruits","en:fruits","en:vegetables"],"Fruits & Vegetables"],
+  [["en:snacks"],"Snacks"],
+];
+function offCategory(tags){
+  if(!tags || !tags.length) return null;
+  for(const [keys,cat] of OFF_CAT){ if(keys.some(function(k){ return tags.indexOf(k)>=0; }) && CAT_ORDER.includes(cat)) return cat; }
+  return null;
+}
 function applyBarcodeResult(nm, catGuess, imgUrl){
   if(!itemScrim.classList.contains("on")) return;   // sheet was closed during a slow lookup — don't leak into it
   if(pendingBarcode) $("#fBarcode").value=pendingBarcode;
@@ -3569,6 +3603,7 @@ function applyBarcodeResult(nm, catGuess, imgUrl){
   if(dupN && dupN.id!==editingId && !backupForId){ offerDuplicate(dupN); return; }
   $("#fName").value=nm;
   let cat;
+  const _exact=(state.catPrefs||{})[String(nm||"").toLowerCase().trim()]; if(_exact) catGuess=_exact;
   if(catGuess){ if(!CAT_ORDER.includes(catGuess)){ ensureCat(catGuess); rebuildCats(); renderCatList(); populateCatSelect(); } cat=catGuess; }
   else cat=autoCategory(nm);
   $("#fCat").value=CAT_ORDER.includes(cat)?cat:"Other";
