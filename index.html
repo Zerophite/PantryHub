@@ -186,6 +186,7 @@ body.viewonly .cathead .catadd{display:none}
 .recrow{padding:8px 0;border-bottom:1px solid var(--line);font-size:14.5px}
 .recrow.tappable{cursor:pointer}
 .recpct{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.recpct[hidden]{display:none}
 .recpct button{flex:1 0 auto;min-width:52px;padding:8px 0;border-radius:10px;border:1.5px solid var(--line);background:var(--card);font-weight:700;font-size:13px;color:var(--ink)}
 .recpct button.on{background:var(--green);color:#fff;border-color:var(--green)}
 .note .ndel{position:absolute;top:10px;right:10px;color:var(--muted);font-size:16px;width:28px;height:28px}
@@ -596,7 +597,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 97 · 2026-09-27</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 98 · 2026-10-11</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -3519,38 +3520,48 @@ async function lookupBarcode(code){
     toast("✓ From your saved products","good");
     return;
   }
-  // Shared product database (admin-curated) before hitting the internet
-  if(window.Products){
-    try{ const sp=await window.Products.get(code);
-      if(myGen!==scanGen) return;
-      if(sp && (sp.name||sp.photo)){ rememberProduct(code,{name:sp.name,category:sp.category,photo:sp.photo});
-        applyBarcodeResult(sp.name||"", sp.category||null, sp.photo||null);
-        toast("✓ From the shared product database","good"); return; } }catch(e){}
-  }
-  toast("🔎 Looking up product…","good");
-  // 1) Open Food Facts
+  // Ask the shared database and Open Food Facts AT THE SAME TIME (each has a time limit). The backup databases start
+  // only if those come up empty, or are slow, so their small free limits aren't used up on every scan.
+  const shared=window.Products ? window.Products.get(code).catch(function(){ return null; }) : Promise.resolve(null);
+  const off=fetchT(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,categories_tags,image_front_small_url`,null,6000)
+    .then(function(r){ return r.json(); })
+    .then(function(j){ return (j && j.status===1 && j.product && (j.product.product_name||j.product.brands)) ? j.product : null; })
+    .catch(function(){ return null; });
+  let backups=null;
+  const startBackups=function(){
+    if(backups) return backups;
+    // USDA FoodData Central (Branded Foods). DEMO_KEY is a free public key (a few dozen lookups/day per network) —
+    // get your own free key at fdc.nal.usda.gov/api-key-signup and paste it below for higher limits.
+    const key="DEMO_KEY";
+    backups={
+      usda: fetchT(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${key}&query=${encodeURIComponent(code)}&dataType=Branded&pageSize=1`,null,6000)
+        .then(function(r){ return r.json(); })
+        .then(function(j){ const f=j && j.foods && j.foods[0]; return (f && (f.description||f.brandName||f.brandOwner)) ? f : null; })
+        .catch(function(){ return null; }),
+      extra: lookupExtraDBs(code).catch(function(){ return null; })
+    };
+    return backups;
+  };
+  const backupTimer=setTimeout(startBackups,2500);
+  const slowTip=setTimeout(function(){ if(myGen===scanGen) toast("🔎 Looking up product…","good"); },700);
   try{
-    const r=await fetchT(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,brands,categories_tags,image_front_small_url`,null,6000);
-    const j=await r.json();
+    const sp=await shared;
     if(myGen!==scanGen) return;
-    if(j.status===1 && j.product && (j.product.product_name||j.product.brands)){
-      const p=j.product;
+    if(sp && (sp.name||sp.photo)){ rememberProduct(code,{name:sp.name,category:sp.category,photo:sp.photo});
+      applyBarcodeResult(sp.name||"", sp.category||null, sp.photo||null);
+      toast("✓ From the shared product database","good"); return; }
+    const p=await off;
+    if(myGen!==scanGen) return;
+    if(p){
       const nm=[p.brands?p.brands.split(",")[0]:"",p.product_name].filter(Boolean).join(" ").trim() || ("Product "+code);
       applyBarcodeResult(nm, offCategory(p.categories_tags), p.image_front_small_url);
       rememberProduct(code,{name:nm, category:$("#fCat").value, photo:p.image_front_small_url||null});
       return;
     }
-  }catch(e){}
-  // 2) USDA FoodData Central (Branded Foods). DEMO_KEY is a free public key (rate-limited to a
-  // few dozen lookups/day per network) — get your own free key at fdc.nal.usda.gov/api-key-signup
-  // and paste it below for higher limits.
-  try{
-    const key="DEMO_KEY";
-    const r=await fetchT(`https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${key}&query=${encodeURIComponent(code)}&dataType=Branded&pageSize=1`,null,6000);
-    const j=await r.json();
+    const bk=startBackups();
+    const f=await bk.usda;
     if(myGen!==scanGen) return;
-    const f=j && j.foods && j.foods[0];
-    if(f && (f.description||f.brandName||f.brandOwner)){
+    if(f){
       const brand=(f.brandName||f.brandOwner||"").trim();
       const desc=(f.description||"").trim();
       const raw=[brand, desc].filter(Boolean).join(" ").replace(/\s+/g," ").trim();
@@ -3558,9 +3569,10 @@ async function lookupBarcode(code){
       applyBarcodeResult(nm, null, null);
       return;
     }
-  }catch(e){}
-  try{ const x=await lookupExtraDBs(code); if(myGen!==scanGen) return;
-    if(x && x.name){ applyBarcodeResult(x.name, null, x.photo||null); rememberProduct(code,{name:x.name, category:$("#fCat").value, photo:x.photo||null}); toast("Product found.","good"); return; } }catch(e){}
+    const x=await bk.extra;
+    if(myGen!==scanGen) return;
+    if(x && x.name){ applyBarcodeResult(x.name, null, x.photo||null); rememberProduct(code,{name:x.name, category:$("#fCat").value, photo:x.photo||null}); toast("Product found.","good"); return; }
+  } finally { clearTimeout(backupTimer); clearTimeout(slowTip); }
   if(myGen!==scanGen) return;
   const bf=$("#fBarcode"); if(bf && !bf.value.trim()) bf.value=code;   // fill the scanned number automatically
   toast(isAdmin()?"Product not found. Barcode saved. Enter the name and add a photo, then save to share it.":"Product not found. Barcode saved.","warn");
@@ -4481,7 +4493,7 @@ const _PRODUCE_DERIV=/^(milk|cream|butter|flour|meal|bread|ground|dried|dehydrat
 const _WHOLEFORM=/^(stick|whole|seed|pod|nib|sprig|clove)$/i;   // a whole form, distinct from ground/powder
 function _sing(w){ if(w.length<=3 || !/s$/.test(w) || /ss$/.test(w)) return w; if(/oes$/.test(w)) return w.slice(0,-2); return w.slice(0,-1); }   // singularize (lemons->lemon, tomatoes->tomato)
 function _words(str){ return normName(str).replace(/cornstarch/g,"corn starch").replace(/cornflour/g,"corn flour").replace(/cornmeal/g,"corn meal").split(" ").map(_sing).filter(function(w){return w.length>1;}); }
-const _SYN={mayo:"mayonnaise",mayonaise:"mayonnaise",veggie:"vegetable",scallion:"onion",cilantro:"coriander",stock:"broth",garbanzo:"chickpea",aubergine:"eggplant",courgette:"zucchini",prawn:"shrimp",soya:"soy",powder:"ground",powdered:"ground",huile:"oil",olio:"oil",aceite:"oil",ail:"garlic",aglio:"garlic",ajo:"garlic",oignon:"onion",cebolla:"onion",tomate:"tomato",pomodoro:"tomato",poulet:"chicken",pollo:"chicken",boeuf:"beef",porc:"pork",poisson:"fish",pescado:"fish",lait:"milk",leche:"milk",beurre:"butter",fromage:"cheese",queso:"cheese",oeuf:"egg",huevo:"egg",farine:"flour",harina:"flour",sucre:"sugar",sel:"salt",poivre:"pepper",vinaigre:"vinegar",moutarde:"mustard",miel:"honey",riz:"rice",citron:"lemon",creme:"cream",eau:"water"};
+const _SYN={mayo:"mayonnaise",mayonaise:"mayonnaise",veggie:"vegetable",scallion:"onion",cilantro:"coriander",stock:"broth",garbanzo:"chickpea",aubergine:"eggplant",courgette:"zucchini",prawn:"shrimp",soya:"soy",powder:"ground",powdered:"ground",huile:"oil",olio:"oil",aceite:"oil",ail:"garlic",aglio:"garlic",ajo:"garlic",oignon:"onion",cebolla:"onion",tomate:"tomato",pomodoro:"tomato",poulet:"chicken",pollo:"chicken",boeuf:"beef",porc:"pork",poisson:"fish",pescado:"fish",lait:"milk",leche:"milk",beurre:"butter",fromage:"cheese",queso:"cheese",oeuf:"egg",huevo:"egg",farine:"flour",harina:"flour",sucre:"sugar",sel:"salt",poivre:"pepper",vinaigre:"vinegar",moutarde:"mustard",miel:"honey",riz:"rice",citron:"lemon",creme:"cream",eau:"water",naturegg:"egg",omegapro:"egg",bouillon:"broth"};
 function _ingSyn(iw){ iw=iw.map(function(w){ return _SYN[w]||w; }); if(iw.length===1 && iw[0]==="pepper") return ["black","pepper"]; return iw; }   // synonyms + bare "pepper" = black pepper
 const _JUICEABLE=/^(lemon|lime|orange|grapefruit|calamansi|mandarin|clementine|tangerine|apple|pineapple|pomegranate|cranberry|grape|tomato|carrot|mango|watermelon)$/i;
 function _ingScore(iw, candName){                     // fresh fruit satisfies its juice/zest; otherwise the strict base check
@@ -4490,6 +4502,14 @@ function _ingScore(iw, candName){                     // fresh fruit satisfies i
   if(iw && iw.length>=2){ const h=iw[iw.length-1], fr=iw[iw.length-2]; if((h==="juice"||h==="zest") && _JUICEABLE.test(fr)) return _ingScoreBase([fr], candName); }
   return -1;
 }
+const _FLAVOR=/^(flavou?r|flavou?red|flavou?ring|taste|tasting|style)$/i;   // "Butter Toast Flavor" tastes like it, it isn't it
+const _NOT_PLAIN={   // a plain recipe word ("flour", "milk") is not these specialty versions
+  flour:/^(rice|corn|almond|coconut|tapioca|potato|chickpea|cassava|oat|buckwheat|rye|glutinous|mochiko|banana|soy|bean|gram|besan|masa)$/i,
+  milk:/^(almond|oat|soy|coconut|rice|cashew|condensed|evaporated|chocolate|powdered|dry|goat|butter|malted)$/i,
+  butter:/^(peanut|almond|cashew|nut|apple|garlic|herb|cocoa|shea)$/i,
+  cream:/^(ice|sour|cheese|whipped|coconut|soup)$/i,
+  sugar:/^(icing|confectioner|confectioners|coconut|palm|cane|maple|pearl|rock)$/i
+};
 function _ingScoreBase(iw, candName){                 // >=0 means candName satisfies the need "iw"; -1 = no match
   if(!iw||!iw.length) return -1;
   let head=iw[iw.length-1];
@@ -4503,6 +4523,9 @@ function _ingScoreBase(iw, candName){                 // >=0 means candName sati
   const needGround=iw.indexOf("ground")>=0, candGround=itw.indexOf("ground")>=0;
   if(needGround && !candGround && (_PRODUCE_HEAD.test(head) || itw.some(function(w){ return _WHOLEFORM.test(w); }))) return -1; // "X powder" is not fresh X, nor a stick/seed/whole form
   if(itw.some(function(w){ return _SNACKFORM.test(w) && iw.indexOf(w)<0; })) return -1; // a snack product is not the raw ingredient
+  if(itw.some(function(w){ return _FLAVOR.test(w) && iw.indexOf(w)<0; })) return -1;    // "Butter Toast Flavor" is not bread or butter
+  if(_NOT_PLAIN[head] && itw.some(function(w){ return _NOT_PLAIN[head].test(w) && iw.indexOf(w)<0; })) return -1;   // "flour" is not rice flour
+  if(!_PRODUCE_HEAD.test(head)){ const hi=itw.indexOf(head), prev=hi>0?itw[hi-1]:""; if(prev && _PRODUCE_HEAD.test(prev) && iw.indexOf(prev)<0) return -1; }   // "bread" is not garlic bread, "milk" is not almond milk
   if(_PRODUCE_HEAD.test(head) && !iw.some(function(w){return _PRODUCE_DERIV.test(w);}) && itw.some(function(w){ return _PRODUCE_DERIV.test(w) && iw.indexOf(w)<0; })) return -1; // fresh produce ("onion") is not a processed product ("onion powder/salt/rings")
   if(!ingForm && itw.some(function(w){ return _RFORM.test(w) && iw.indexOf(w)<0; })) return -1; // different form -> no
   if(genericHead && mods.length && !mods.every(function(w){ return itw.indexOf(w)>=0; })) return -1; // generic head needs its modifier
@@ -4515,8 +4538,11 @@ function findPantryMatch(ing){
   let best=null, bestExtra=1e9;
   for(const it of state.items){
     if(it.location!=="pantry") continue;
-    const extra=_ingScore(iw, it.name);
-    if(extra>=0 && extra<bestExtra){ bestExtra=extra; best=it; }
+    const sc=_ingScore(iw, it.name);
+    if(sc<0) continue;
+    const cw=_ingSyn(_words(it.name));
+    const extra=sc-2*iw.filter(function(w,i){ return i<iw.length-1 && cw.indexOf(w)>=0; }).length;   // reward matching "unsalted", "brown", ...
+    if(extra<bestExtra){ bestExtra=extra; best=it; }
   }
   return best;
 }
@@ -4566,7 +4592,13 @@ let recipeTabs=[], recipeActive=0, recipeLastIngs=[];
 function recipeKey(){ return "pantry_recipes_v1_"+(window.CURRENT_PANTRY||"local"); }   // per-pantry, THIS DEVICE only — never synced
 function persistRecipes(){ try{ localStorage.setItem(recipeKey(), JSON.stringify(recipeTabs)); }catch(e){} }
 function loadRecipes(){ try{ const a=JSON.parse(localStorage.getItem(recipeKey())||"[]"); recipeTabs=Array.isArray(a)?a:[]; }catch(e){ recipeTabs=[]; } }
-function tabTitle(text,i){ const f=((text||"").split(/[\n,]/)[0]||"").trim(); return f ? (f.length>15?f.slice(0,15)+"…":f) : ("Recipe "+(i+1)); }
+function tabTitle(text,i){
+  const lines=(text||"").split(/\n/).map(function(l){ return l.trim(); }).filter(Boolean);
+  let f=(lines[0]||"").split(",")[0].trim();
+  if(/^[\d\u00BC-\u00BE\u2150-\u215E]/.test(f) || /^[-*\u2022]/.test(f)){ const p=parseRecipeLines(f)[0]; f=p ? titleCase(p) : f; }   // an ingredient line: name it after the ingredient
+  f=f.replace(/[:\uFF1A]\s*$/,"");
+  return f ? (f.length>15?f.slice(0,15)+"…":f) : ("Recipe "+(i+1));
+}
 function newRecipeTab(){ recipeTabs.push({text:""}); recipeActive=recipeTabs.length-1; persistRecipes(); }
 function saveActiveTab(){ if(recipeTabs[recipeActive]){ recipeTabs[recipeActive].text=$("#recipeText").value; persistRecipes(); } }
 function renderRecipeTabs(){ const host=$("#recipeTabs"); if(!host) return;
@@ -4775,7 +4807,7 @@ if(window.CLOUD){
   window.Sync={ready:false, push(st){ latest=st; dirty=true; clearTimeout(pushTimer); pushTimer=setTimeout(flush,700); }};
   // Shared product database (keyed by barcode) — read by everyone, written by admins.
   window.Products={
-    async get(code){ try{ const snap=await getDoc(doc(db,"products",String(code))); return snap.exists()?snap.data():null; }catch(e){ return null; } },
+    async get(code){ try{ const snap=await Promise.race([getDoc(doc(db,"products",String(code))), new Promise(function(r){ setTimeout(function(){ r(null); },2500); })]); return (snap && snap.exists())?snap.data():null; }catch(e){ return null; } },
     async save(code,info){ try{ await setDoc(doc(db,"products",String(code)),{name:info.name||"",category:info.category||"",photo:info.photo||"",updatedAt:serverTimestamp()},{merge:true}); return true; }catch(e){ return false; } },
     async probe(){ try{ await setDoc(doc(db,"products","selftest"),{t:Date.now()},{merge:true}); return {ok:true, uid:uid}; }catch(e){ return {ok:false, error:(e&&e.code)||(e&&e.message)||String(e), uid:uid}; } }
   };
@@ -4789,7 +4821,7 @@ if(window.CLOUD){
   };
   // Per-item photos, keyed by item id, so shared viewers see EVERY photo (barcode or not). Free Firestore.
   window.Photos={
-    async get(id){ try{ const snap=await getDoc(doc(db,"itemphotos",String(id))); return snap.exists()?(snap.data().data||null):null; }catch(e){ return null; } },
+    async get(id){ try{ const snap=await Promise.race([getDoc(doc(db,"itemphotos",String(id))), new Promise(function(r){ setTimeout(function(){ r(null); },8000); })]); return (snap && snap.exists())?(snap.data().data||null):null; }catch(e){ return null; } },
     async save(id,data){ try{ await setDoc(doc(db,"itemphotos",String(id)),{data:data,updatedAt:serverTimestamp()}); return true; }catch(e){ return false; } }
   };
   async function flush(){
