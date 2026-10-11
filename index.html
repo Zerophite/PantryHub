@@ -149,6 +149,9 @@ body.viewonly .cathead .catadd{display:none}
 .pill.info{background:#e3f2fd;color:#1565c0}
 .pill.openpill{background:#ede7f6;color:#5e35b1;border:none;font-weight:700;cursor:pointer}
 .pill.openpill:active{background:#d1c4e9}
+.pill.storepill{border:none;cursor:pointer;font-family:inherit}
+.pill.storepill.pan{background:#f3ece0;color:#7a5a2b}
+.pill.storepill:active{filter:brightness(.92)}
 .bar{height:7px;border-radius:6px;background:#e9ede6;overflow:hidden;margin-top:7px;max-width:150px}
 .bar > i{display:block;height:100%;border-radius:6px;background:linear-gradient(90deg,var(--green-l),var(--lime))}
 .bar.low > i{background:linear-gradient(90deg,#ef5350,#e53935)}
@@ -620,7 +623,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 100 · 2026-10-11</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 101 · 2026-10-11</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2130,7 +2133,8 @@ function itemCardHTML(it,mode,showCat,opts){
   else if(fs && mode!=="grocery"){ sub.push(`<span class="pill ${fs.level==='bad'?'bad':fs.level==='warn'?'warn':'ok'}">${fs.level==='ok'?'🟢':fs.level==='warn'?'⏳':'⚠️'} ${fs.source==='bought'?'≈ ':''}${fs.label}</span>`); }
   if(mode!=="grocery" && it.opened && !agesFromPurchase(it)) sub.push(`<button class="pill openpill" data-newbatch="${it.id}">🔄 New batch</button>`);
   else if(mode!=="grocery" && !it.opened && !agesFromPurchase(it) && shelfLife(it.name,it.category)) sub.push(`<button class="pill openpill" data-open="${it.id}">🫙 Mark open</button>`);
-  if(it.store && it.store!=="pantry") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
+  if(mode!=="grocery") sub.push(`<button type="button" class="pill info storepill${(it.store||"pantry")==="pantry"?" pan":""}" data-movestore="${it.id}">${it.store==='fridge'?'❄️ Fridge':it.store==='freezer'?'🧊 Freezer':'🧺 Pantry'}</button>`);   // tap to move
+  else if(it.store && it.store!=="pantry") sub.push(`<span class="pill info">${it.store==='fridge'?'❄️ Fridge':'🧊 Freezer'}</span>`);
   if(it.photoTemp && isAdmin()) sub.push(`<span class="pill warn" title="Temporary photo from a label scan — open the item to replace or keep it">📸 Temp photo</span>`);
 
   const barHTML=(it.percent!=null)?`<div class="bar ${pctClass(it.percent)}"><i style="width:${it.percent}%"></i></div>`:"";
@@ -2342,6 +2346,8 @@ document.addEventListener("click",e=>{
   if(filt){ const f=filt.dataset.filter; activeFilter = (f==="all"||activeFilter===f) ? null : f; renderPantry(); return; }
   const sfilt=e.target.closest("[data-storefilter]");
   if(sfilt){ const f=sfilt.dataset.storefilter; storeFilter=(f==="all"||storeFilter===f)?null:f; renderPantry(); return; }
+  const mvs=e.target.closest("[data-movestore]");
+  if(mvs){ moveStorePanel(mvs.dataset.movestore); return; }
   const openb=e.target.closest("[data-open]");
   if(openb){ markOpened(openb.dataset.open); return; }
   const pc=e.target.closest("[data-pct]");
@@ -2370,7 +2376,7 @@ document.addEventListener("click",e=>{
 
 function getItem(id){ return state.items.find(i=>i.id===id); }
 // Mark opened: a quick panel asks where it's kept (and if it's vacuum sealed) — one tap finishes it.
-let _openId=null;
+let _openId=null, _openMode="open";   // "open" = mark opened + choose spot; "move" = just move it
 const _OPEN_STORES=[["pantry","🧺","Pantry"],["fridge","❄️","Fridge"],["freezer","🧊","Freezer"]];
 function _openDays(it, store, vac){
   const sl=shelfLife(it.name,it.category); if(!sl) return null;
@@ -2385,11 +2391,12 @@ function renderOpenStores(){
   const vac=$("#openVac").checked;
   const sl=shelfLife(it.name,it.category);
   const best=bestStore(sl,true);
-  const pre=isProduceCat(it.category) && best ? best : it.store;   // fresh produce: the best place is pre-selected
+  const moving=_openMode==="move", sealed=moving && !it.opened;   // sealed items: no "once opened" day counts (they'd mislead)
+  const pre=(!moving && isProduceCat(it.category) && best) ? best : (it.store||"pantry");   // fresh produce: the best place is pre-selected
   $("#openStores").innerHTML=_OPEN_STORES.map(function(o){
-    const d=_openDays(it,o[0],vac);
+    const d=sealed ? null : _openDays(it,o[0],vac);
     const txt = d===null ? "" : d>0 ? _fmtDays(d)+(o[0]===best?" ✓":"") : "Not advised";
-    const cls="opbtn"+(o[0]===pre?" cur":"")+(o[0]===best?" best":"")+(d===0?" no":"");
+    const cls="opbtn"+(o[0]===pre?" cur":"")+(!sealed && o[0]===best?" best":"")+(d===0?" no":"");
     return '<button type="button" class="'+cls+'" data-openstore="'+o[0]+'"><span class="opic">'+o[1]+'</span><b>'+o[2]+'</b>'+(txt?'<small>'+txt+'</small>':'')+'</button>';
   }).join("");
 }
@@ -2397,8 +2404,17 @@ function closeOpenSheet(){ _openId=null; $("#openScrim").classList.remove("on");
 function markOpened(id){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
-  _openId=id;
+  _openId=id; _openMode="open";
   $("#openTitle").textContent="🫙 Opened: "+it.name;
+  $("#openVac").checked=!!it.vac;
+  renderOpenStores();
+  $("#openScrim").classList.add("on");
+}
+function moveStorePanel(id){
+  if(!requireEdit()) return;
+  const it=getItem(id); if(!it) return;
+  _openId=id; _openMode="move";
+  $("#openTitle").textContent="Move: "+it.name;
   $("#openVac").checked=!!it.vac;
   renderOpenStores();
   $("#openScrim").classList.add("on");
@@ -2406,11 +2422,22 @@ function markOpened(id){
 $("#openVac").addEventListener("change",renderOpenStores);
 $("#openStores").addEventListener("click",function(e){
   const b=e.target.closest("[data-openstore]"); if(!b || !_openId) return;
-  const id=_openId; closeOpenSheet();
-  finishOpened(id, b.dataset.openstore, $("#openVac").checked);
+  const id=_openId, mode=_openMode; closeOpenSheet();
+  if(mode==="move") finishMove(id, b.dataset.openstore, $("#openVac").checked);
+  else finishOpened(id, b.dataset.openstore, $("#openVac").checked);
 });
 $("#btnOpenCancel").addEventListener("click",closeOpenSheet);
 $("#openScrim").addEventListener("click",function(e){ if(e.target===$("#openScrim")) closeOpenSheet(); });
+function finishMove(id, store, vac){
+  if(!requireEdit()) return;
+  const it=getItem(id); if(!it) return;
+  const same=(it.store||"pantry")===store && !!it.vac===!!vac;
+  it.store=store; it.vac=!!vac;
+  if(same) return;
+  save(); renderAll();
+  const _where={pantry:"🧺 Pantry",fridge:"❄️ Fridge",freezer:"🧊 Freezer"}[store]||store;
+  toast("Moved to "+_where+(it.vac?" · vacuum sealed":""),"good");
+}
 function finishOpened(id, store, vac){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
