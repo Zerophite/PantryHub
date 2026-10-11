@@ -223,6 +223,11 @@ body.viewonly .cathead .catadd{display:none}
 .grab{width:44px;height:5px;background:var(--line);border-radius:3px;margin:2px auto 10px;box-sizing:content-box;padding:9px 40px;background-clip:content-box;cursor:pointer}
 .grab:active{background:var(--muted);background-clip:content-box}
 .sheet h2{margin:4px 0 16px;font-size:19px}
+.sheethead{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.sheethead h2{flex:1 1 auto;min-width:0}
+.topsave{flex:0 0 auto;margin:0 0 12px;padding:8px 20px;border:none;border-radius:20px;background:var(--green);color:#fff;font:inherit;font-weight:800;font-size:15px;cursor:pointer}
+.topsave:active{filter:brightness(.9)}
+body.viewonly .topsave{display:none}
 .field{margin-bottom:14px}
 .field label{display:block;font-size:12.5px;font-weight:700;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.4px}
 .field input,.field select,.field textarea{
@@ -447,7 +452,7 @@ body.viewonly .vobadge{display:block}
 <div class="scrim" id="itemScrim">
   <div class="sheet" id="itemSheet">
     <div class="grab"></div>
-    <h2 id="itemSheetTitle">Add Item</h2>
+    <div class="sheethead"><h2 id="itemSheetTitle">Add Item</h2><button type="button" class="topsave" id="btnSaveTop">Save</button></div>
     <div class="quickscan">
       <button class="qs" id="qsBarcode">📷 Scan barcode</button>
       <button class="qs" id="qsDate">🗓️ Scan expiry date</button>
@@ -623,7 +628,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 101 · 2026-10-11</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 102 · 2026-10-11</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2600,10 +2605,36 @@ function openItemSheet(id){
   updateFreshInfo();
   { const g=$("#chipGoogleImg"); if(g) g.style.display=isAdmin()?"":"none"; const pz=$("#chipPasteImg"); if(pz) pz.style.display=isAdmin()?"":"none"; const ph=$("#chipPhoto"); if(ph) ph.style.display=isAdmin()?"":"none"; }
   itemScrim.classList.add("on");
+  _sheetBase=_sheetSnap();
   try{ $("#itemSheet").scrollTop=0; }catch(e){}
   requestAnimationFrame(()=>{ try{ $("#itemSheet").scrollTop=0; }catch(e){} });
 }
-function closeItemSheet(){ scanGen++; itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingPhotoTemp=false; pendingBarcode=null; backupForId=null; chainDate=false; rapidMode=false; }
+// What the form looked like when it opened — so closing can tell whether anything was changed.
+let _sheetBase=null;
+function _photoKey(p){ return (typeof p==="string") ? (p.length+":"+p.slice(0,40)+p.slice(-20)) : String(p||""); }
+function _sheetSnap(){
+  const v=function(q){ const el=$(q); return el ? (el.type==="checkbox" ? !!el.checked : String(el.value||"")) : ""; };
+  return JSON.stringify([v("#fName"),v("#fCat"),v("#fPct"),v("#fQty"),($("#fCntVal")||{}).textContent||"",v("#fExp"),v("#fOpen"),storeVal,v("#fVac"),ripeVal,v("#fNote"),v("#fBarcode"),_photoKey(pendingPhoto)]);
+}
+function _sheetChanged(){ return _sheetBase!==null && _sheetSnap()!==_sheetBase; }
+// Swipe down / tap the grab bar / tap outside:
+//  • editing -> save your changes (nothing changed = just close)
+//  • new item with a name -> ask "Save this item?"   • new item still empty -> just close
+function dismissItemSheet(){
+  if(!itemScrim.classList.contains("on")) return;
+  const hasName=!!$("#fName").value.trim();
+  const mayEdit=(typeof canEdit!=="function") || canEdit();
+  if(editingId && !backupForId){
+    if(!mayEdit || !_sheetChanged()){ closeItemSheet(); return; }
+    if(!hasName){ toast("Please enter an item name","warn"); return; }   // stays open
+    $("#btnSaveItem").click(); return;                                    // saves + closes
+  }
+  if(mayEdit && hasName){
+    if(confirm("Save this item?\n\nOK saves it. Cancel discards it.")){ $("#btnSaveItem").click(); return; }
+  }
+  closeItemSheet();
+}
+function closeItemSheet(){ _sheetBase=null; scanGen++; itemScrim.classList.remove("on"); editingId=null; pendingPhoto=null; pendingPhotoTemp=false; pendingBarcode=null; backupForId=null; chainDate=false; rapidMode=false; }
 
 $("#fabAdd").addEventListener("click",()=>{
   if(!requireEdit()) return;
@@ -2614,7 +2645,8 @@ $("#fabScan") && $("#fabScan").addEventListener("click",()=>{
   openItemSheet(null); chainDate=true; rapidMode=true; scanTarget="pantry"; openCamera("barcode");
 });
 $("#btnCancelItem").addEventListener("click",closeItemSheet);
-itemScrim.addEventListener("click",e=>{ if(e.target===itemScrim) closeItemSheet(); });
+itemScrim.addEventListener("click",e=>{ if(e.target===itemScrim) dismissItemSheet(); });
+$("#btnSaveTop").addEventListener("click",()=>{ $("#btnSaveItem").click(); });
 
 // store segment
 let storeVal="pantry", storeTouched=false;
@@ -3053,7 +3085,7 @@ function showPhoto(url){
   if(typeof url==="string" && (url.startsWith("data:")||url.startsWith("http"))){ show(url); return; }
   pv.style.display="none"; pv.removeAttribute("src"); hint.textContent="🖼️ No photo yet"; { const kp=$("#chipKeepPhoto"); if(kp) kp.style.display="none"; }
   if(url==="L"){ hint.textContent="Loading photo…";
-    resolveItemPhoto(editingId, pendingBarcode, ($("#fName")&&$("#fName").value)||"").then(p=>{ if(p){ pendingPhoto=p; show(p); } else hint.textContent="🖼️ No photo yet"; });
+    resolveItemPhoto(editingId, pendingBarcode, ($("#fName")&&$("#fName").value)||"").then(p=>{ if(p){ const _was=_photoKey(pendingPhoto); pendingPhoto=p; if(_sheetBase && JSON.parse(_sheetBase)[12]===_was){ const b=JSON.parse(_sheetBase); b[12]=_photoKey(p); _sheetBase=JSON.stringify(b); } show(p); } else hint.textContent="🖼️ No photo yet"; });
   }
 }
 // compress an image element/canvas to small jpeg dataURL
@@ -4206,7 +4238,7 @@ function enableSwipeClose(sheet, closeFn){
   const grab=sheet.querySelector(".grab");
   if(grab) grab.addEventListener("click",closeFn);
 }
-enableSwipeClose($("#itemSheet"), closeItemSheet);
+enableSwipeClose($("#itemSheet"), dismissItemSheet);
 enableSwipeClose($("#noteScrim .sheet"), ()=>noteScrim.classList.remove("on"));
 enableSwipeClose($("#settingsSheet"), ()=>settingsScrim.classList.remove("on"));
 enableSwipeClose($("#recipeScrim .sheet"), closeRecipeSheet);
