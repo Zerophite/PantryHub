@@ -628,7 +628,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 102 · 2026-10-11</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 103 · 2026-10-11</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -871,8 +871,8 @@ const CAT_ICON_RULES=[
   [/seafood|\bfish\b/,"🐟"],[/meat|protein|poultry|beef|pork|chicken|deli/,"🥩"],[/\begg/,"🥚"],
   [/dairy|milk|cheese|yogurt|butter/,"🥛"],
   [/bak(e|ing)|dessert|sweet|pastry|cake/,"🧁"],[/spice|season|herb/,"🧂"],
-  [/sauce|dressing|condiment/,"🥫"],[/\boil|vinegar/,"🫒"],[/can|soup|tin|broth|stock/,"🍲"],
-  [/pasta|noodle|grain|rice|cereal|oat/,"🍜"],[/bread|bakery|loaf/,"🍞"],
+  [/sauce|dressing|condiment/,"🥫"],[/\boil|vinegar/,"🫒"],[/can|soup|tin|broth|stock/,"🥫"],
+  [/pasta|noodle|grain|rice|cereal|oat/,"🌾"],[/bread|bakery|loaf/,"🍞"],
   [/frozen|freezer|\bice\b/,"🧊"],[/dried|dry good/,"🍂"],
   [/drink|beverage|juice|water|soda|coffee|tea|alcohol|wine|beer/,"🥤"],
   [/snack|chip|candy|cookie|cracker/,"🍪"],[/nut|legume|\bbean/,"🥜"],
@@ -906,6 +906,15 @@ function restoreOldCats(){
   if(touched) _migratedThisLoad=true;
   return touched;
 }
+const NEW_CAT_ICONS={"Canned & Jarred":["🍲","🥫"], "Grains & Pasta":["🍜","🌾"]};   // name: [old default, new]
+function refreshCatIcons(){
+  if(state.catIconsV===1) return false;
+  let touched=false;
+  (state.cats||[]).forEach(function(c){ const m=NEW_CAT_ICONS[c.name]; if(m && c.icon===m[0]){ c.icon=m[1]; touched=true; } });
+  state.catIconsV=1;
+  if(touched) _migratedThisLoad=true;
+  return touched;
+}
 function dropFrozenCat(){
   if(state.noFrozenCat) return false;
   let touched=false;
@@ -923,6 +932,8 @@ function rebuildCats(){
     state.cats = CLOUD ? [{name:"Other",icon:"📦"}] : DEFAULT_CATS.map(([name,icon])=>({name,icon}));
   }
   dropFrozenCat();      // remove the unused "Frozen" category (freezer is a storage spot, not a category)
+  refreshCatIcons();    // one-time: clearer icons (only where you still have the old default icon)
+  cleanWordPrefs();     // one-time: brand words no longer steer categories
   syncCatsFromItems();  // categories then grow automatically from whatever items the user adds
   CAT_ORDER=state.cats.map(c=>c.name);
   CAT_ICON=Object.fromEntries(state.cats.map(c=>[c.name,c.icon]));
@@ -933,13 +944,22 @@ function learnCat(name, cat){
   if(!state.catPrefs) state.catPrefs={};
   const n=name.toLowerCase().trim();
   state.catPrefs[n]=cat;
-  n.split(/\s+/).filter(w=>w.length>2).forEach(w=>{ state.catPrefs["w:"+w]=cat; });
+  n.split(/\s+/).filter(w=>w.length>2).forEach(w=>{ const k="w:"+w, was=state.catPrefs[k]; state.catPrefs[k]=(was && was!==cat) ? "?" : cat; });   // a word used in 2+ categories (a brand) is ignored
+}
+// One-time: rebuild word habits from your saved items, so brand words used across categories are ignored.
+function cleanWordPrefs(){
+  if(!state.catPrefs || state.catPrefsV===2) return;
+  const p=state.catPrefs, seen={};
+  Object.keys(p).forEach(function(k){ if(k.indexOf("w:")===0) return; const cat=p[k]; k.split(/\s+/).filter(function(w){ return w.length>2; }).forEach(function(w){ (seen[w]=seen[w]||{})[cat]=1; }); });
+  Object.keys(p).forEach(function(k){ if(k.indexOf("w:")===0) delete p[k]; });
+  Object.keys(seen).forEach(function(w){ const cats=Object.keys(seen[w]); p["w:"+w]=cats.length===1?cats[0]:"?"; });
+  state.catPrefsV=2;
 }
 function preferredCategory(name){
   const n=(name||"").toLowerCase().trim(); if(!n) return "";
   const p=state.catPrefs||{};
   if(p[n]) return p[n];
-  for(const w of n.split(/\s+/).filter(w=>w.length>2)){ if(p["w:"+w]) return p["w:"+w]; }
+  for(const w of n.split(/\s+/).filter(w=>w.length>2)){ const c=p["w:"+w]; if(c && c!=="?") return c; }
   return "";
 }
 
@@ -1436,6 +1456,8 @@ const CAT_RULES=[
   [["cake mix","brownie mix","muffin mix","cookie mix","pancake mix","waffle mix","baking mix","baking soda","baking powder","cocoa powder","bread flour"],"Baking"],
   [["popcorn chicken","chicken nugget"],"Proteins"],
   [["ice cream","gelato","sorbet","popsicle","frozen yogurt","frozen meal","frozen dinner","frozen pizza","frozen waffle"],"Snacks"],
+  [["bouillon de","ready to use broth","ready-to-use broth"],"Canned & Jarred"],   // French "bouillon de poulet" = liquid broth (a cube/paste stays a seasoning)
+  [["instant noodle","cup noodle","ramen","ramyun","ramyeon","pancit canton","lucky me","nissin","indomie","neoguri","nongshim","bread pan"],"Snacks"],   // you file instant noodles & Bread Pan as snacks
   [["bouillon","stock cube","beef cube","pork cube","chicken cube","maggi cube","knorr cube"],"Spices & Seasonings"],
   [["chicken stock","beef stock","vegetable stock","fish stock","chicken broth","beef broth","bone broth"],"Canned & Jarred"],
   [["fish sauce"],"Oils, Vinegars & Condiments"],
@@ -1453,15 +1475,15 @@ const CAT_RULES=[
   [["spaghetti squash"],"Fruits & Vegetables"],
   // --- PRODUCT TYPES: what the product IS beats what it tastes like (coffee crisp BAR, chicken SEASONING, sour cream & onion CHIPS) ---
   [["chocolate milk","almond milk","oat milk","soy milk","rice milk","cashew milk"],"Dairy & Refrigerated"],
-  [["milk tea","hot chocolate","hot cocoa","iced tea","iced coffee","cold brew","latte","frappuccino","energy drink","sports drink","=drink","=drinks","beverage","=soda","soft drink","kombucha","lemonade","coca-cola","coca cola","pepsi","sprite","gatorade","red bull","minute maid","fruit punch","pure leaf","arizona","snapple","tropicana","=c2"],"Beverages"],
-  [["tomato sauce","pasta sauce","spaghetti sauce","pizza sauce","marinara","tomato paste","applesauce","apple sauce"],"Canned & Jarred"],
-  [["chocolate syrup","chocolate sauce","caramel sauce","=sauce","=sauces","dressing","=dip"],"Oils, Vinegars & Condiments"],
-  [["seasoning","=rub","spice blend","=spices","breading","batter mix","coating mix"],"Spices & Seasonings"],
-  [["instant noodle","cup noodle","ramen","pancit canton","noodle","tortilla","=bread","bagel"],"Grains & Pasta"],
+  [["milk tea","hot chocolate","hot cocoa","iced tea","iced coffee","cold brew","latte","frappuccino","energy drink","sports drink","=drink","=drinks","beverage","=soda","soft drink","kombucha","lemonade","coca-cola","coca cola","pepsi","sprite","gatorade","red bull","minute maid","fruit punch","pure leaf","arizona","snapple","tropicana","=c2","cappuccino","instant coffee"],"Beverages"],
+  [["tomato sauce","pasta sauce","spaghetti sauce","pizza sauce","marinara","tomato paste","applesauce","apple sauce","la costena","pickled jalapeno"],"Canned & Jarred"],
+  [["chocolate syrup","chocolate sauce","caramel sauce","=sauce","=sauces","dressing","=dip","bean paste","soybean paste","doenjang","chunjang","miso","rice wine","shao hsing","shaoxing","cooking wine","huile","aceite","=olio"],"Oils, Vinegars & Condiments"],
+  [["seasoning","=rub","spice blend","=spices","breading","batter mix","coating mix","crispy fry","bonito flake","katsuobushi"],"Spices & Seasonings"],
+  [["mung bean","dried bean","dry bean","lentil","split pea","semola","paratha","=roti","=naan","=pita","flatbread","english muffin","noodle","tortilla","=bread","bagel"],"Grains & Pasta"],
   [["chocolate chip","baking chip","butterscotch chip","peanut butter chip"],"Baking"],
-  [["=bar","=bars","=crisp","=crisps","=chip","=chips","candy","candies","gummy","gummies","gummi","lollipop","marshmallow","toffee","truffle","brownie","donut","doughnut","pretzel","popcorn","wafer","snack","cheese puff","cheese curl","pringles","doritos","cheetos","ruffles","tostitos","fritos","=lays","oreo","kit kat","kitkat","snickers","twix","reese","skittles","haribo","smarties","=aero","coffee crisp","mars bar","milk chocolate","dark chocolate","white chocolate","chocolate"],"Snacks"],
+  [["=bar","=bars","=crisp","=crisps","=chip","=chips","candy","candies","gummy","gummies","gummi","lollipop","marshmallow","toffee","truffle","brownie","donut","doughnut","pretzel","popcorn","wafer","snack","cheese puff","cheese curl","pringles","doritos","cheetos","ruffles","tostitos","fritos","=lays","oreo","kit kat","kitkat","snickers","twix","reese","skittles","haribo","smarties","=aero","coffee crisp","mars bar","milk chocolate","dark chocolate","white chocolate","chocolate","french fries","=fries"],"Snacks"],
   // --- Proteins ---
-  [["chicken","beef","pork","turkey"," ham","bacon","sausage","hotdog","hot dog","steak","ribs","chop","lamb","veal","minced beef","minced pork","minced meat","fish ball","fish","salmon","tuna","tilapia","bangus","cod","haddock","pollock","basa","catfish","mahi","shrimp","prawn","crab","squid","sardine","mackerel","anchov","tofu","tempeh","egg","spam","luncheon","pepperoni","salami","bologna"],"Proteins"],
+  [["chicken","beef","pork","turkey"," ham","bacon","sausage","hotdog","hot dog","steak","ribs","chop","lamb","veal","minced beef","minced pork","minced meat","fish ball","fish","salmon","tuna","tilapia","bangus","cod","haddock","pollock","basa","catfish","mahi","shrimp","prawn","crab","squid","sardine","mackerel","anchov","tofu","tempeh","egg","spam","luncheon","pepperoni","salami","bologna","meatball","tuyo","tunsoy","daing"],"Proteins"],
   // --- Dairy & Refrigerated ---
   [["milk","cheese","mozzarella","cheddar","parmesan","yogurt","yoghurt","butter","cream","margarine","sour cream","cottage cheese","creamer","kefir","half and half"],"Dairy & Refrigerated"],
   // --- Baking ---
@@ -1547,7 +1569,7 @@ const FRESH=[
   [["lemongrass","lemon grass"],{fridge:21,freezer:180,pantry:3}],
   [["oyster sauce","oyster flavoured","oyster flavored","oyster-flavoured","oyster-flavored"],{fridge:150,freezer:0,pantry:30}],
   // Broth/stock CARTONS are shelf-stable liquids, not raw meat — keep them off the beef/chicken matches.
-  [["chicken stock","beef stock","vegetable stock","fish stock","chicken broth","beef broth","vegetable broth","bone broth","broth"],{fridge:5,freezer:120,pantry:1}],
+  [["chicken stock","beef stock","vegetable stock","fish stock","chicken broth","beef broth","vegetable broth","bone broth","broth","bouillon de","ready to use broth"],{fridge:5,freezer:120,pantry:1}],
   // Sauces that merely mention garlic/onion (hoisin, chili-garlic) must beat the fresh-produce matches.
   [["hoisin"],{fridge:270,freezer:180,pantry:60}],
   [["chili garlic sauce","garlic chili sauce","buffalo sauce","buffalo wing","redhot","red hot"],{fridge:365,freezer:0,pantry:180}],
@@ -1706,6 +1728,7 @@ const FRESH=[
   [["apple"],{fridge:40,freezer:240,pantry:7}],
   [["lemon","lemons","lime","fresh lime","limes","lime wedge","key lime"],{fridge:28,freezer:120,pantry:7}],
   [["tomato fresh","fresh tomato"],{fridge:7,freezer:60,pantry:5}],
+  [["cherry tomato","grape tomato","roma tomato","tomatoes","tomato"],{fridge:7,freezer:60,pantry:5}],   // "Red Cherry Tomatoes" are tomatoes, not cherries
   [["ginger"],{fridge:21,freezer:180,pantry:7}],
   [["garlic"],{fridge:14,freezer:180,pantry:90}],
   [["onion"],{fridge:14,freezer:240,pantry:30}],
@@ -3471,6 +3494,12 @@ function onBarcode(code){ if(scanTarget==="grocery") groceryScanBarcode(code); e
 
 // Resolve a barcode to {name,category,photo} WITHOUT touching the add form (cache -> Open Food Facts).
 // ===== Extra free barcode databases (no AI needed when one of them knows the product) =====
+function brandName(brands, product){   // "Knorr" + "Knorr Liquid Seasoning" -> "Knorr Liquid Seasoning"
+  const b=String(brands||"").split(",")[0].trim(), p=String(product||"").trim();
+  if(!b) return p; if(!p) return b;
+  const nb=normName(b), np=normName(p);
+  return (np===nb || np.indexOf(nb+" ")===0) ? p : (b+" "+p);
+}
 function cleanUpcTitle(t){   // "5 Boxes Buckley's Cold & Sinus 24 Liquid Gels 24 Hour Pack Canada Made" -> "Buckley's Cold & Sinus Liquid Gels"
   let x=String(t||"")
     .replace(/^\s*(lot|set|pack|case|box)\s+of\s+\d+\s*/i,"")
@@ -3489,7 +3518,7 @@ function _firstFound(ps){ return new Promise(function(res){ let left=ps.length; 
 async function lookupExtraDBs(code){
   code=String(code||"").replace(/\s/g,""); if(!code) return null;
   const facts=function(host,src){ return fetchT("https://"+host+"/api/v2/product/"+code+".json?fields=product_name,brands,image_front_small_url",null,6000)
-    .then(function(r){ return r.json(); }).then(function(j){ if(j && j.status===1 && j.product && (j.product.product_name||j.product.brands)){ const p=j.product; const nm=[p.brands?p.brands.split(",")[0]:"", p.product_name].filter(Boolean).join(" ").trim(); if(nm) return {name:nm, photo:p.image_front_small_url||null, src:src}; } return null; })
+    .then(function(r){ return r.json(); }).then(function(j){ if(j && j.status===1 && j.product && (j.product.product_name||j.product.brands)){ const p=j.product; const nm=brandName(p.brands, p.product_name); if(nm) return {name:nm, photo:p.image_front_small_url||null, src:src}; } return null; })
     .catch(function(){ return null; }); };
   const tries=[ facts("world.openproductsfacts.org","Open Products Facts"), facts("world.openbeautyfacts.org","Open Beauty Facts") ];
   if(window.GEMINI && window.GEMINI_PROXY && !(_upcOffAt && Date.now()-_upcOffAt<600000)){
@@ -3511,7 +3540,7 @@ async function resolveProduct(code){
     const j=await r.json();
     if(j.status===1 && j.product && (j.product.product_name||j.product.brands)){
       const p=j.product;
-      const nm=[p.brands?p.brands.split(",")[0]:"",p.product_name].filter(Boolean).join(" ").trim();
+      const nm=brandName(p.brands, p.product_name);
       const info={name:nm||("Product "+code), category:((state.catPrefs||{})[(nm||"").toLowerCase()]||offCategory(p.categories_tags)||autoCategory(nm||"")), photo:p.image_front_small_url||null};
       rememberProduct(code, info);
       return info;
@@ -3673,7 +3702,7 @@ async function lookupBarcode(code){
     const p=await off;
     if(myGen!==scanGen) return;
     if(p){
-      const nm=[p.brands?p.brands.split(",")[0]:"",p.product_name].filter(Boolean).join(" ").trim() || ("Product "+code);
+      const nm=brandName(p.brands, p.product_name) || ("Product "+code);
       applyBarcodeResult(nm, offCategory(p.categories_tags), p.image_front_small_url);
       rememberProduct(code,{name:nm, category:$("#fCat").value, photo:p.image_front_small_url||null});
       return;
@@ -3684,7 +3713,7 @@ async function lookupBarcode(code){
     if(f){
       const brand=(f.brandName||f.brandOwner||"").trim();
       const desc=(f.description||"").trim();
-      const raw=[brand, desc].filter(Boolean).join(" ").replace(/\s+/g," ").trim();
+      const raw=brandName(brand, desc).replace(/\s+/g," ").trim();
       const nm=(raw?titleCase(raw.toLowerCase()):("Product "+code));
       applyBarcodeResult(nm, null, null);
       return;
