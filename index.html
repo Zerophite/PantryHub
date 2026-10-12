@@ -628,7 +628,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 108 · 2026-10-12</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 109 · 2026-10-12</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -2090,12 +2090,18 @@ function seed(){
 
 /* ---------- Freshness computation ---------- */
 function daysBetween(a,b){ return Math.round((new Date(b)-new Date(a))/86400000); }
-// Storage history of an opened item: {a: day the countdown started, seg: [[place, from-day], ...]}.
+// Storage history of an opened item: {a: day the countdown started, seg: [{s: place, d: from-day}, ...]}.
+// (Objects, not [place, day] pairs: the cloud database can't store a list inside a list.)
 // Each place uses up its share of the item's life; moves on the same day don't count (misclicks are free).
+function _segIn(x){ return Array.isArray(x) ? [x[0], x[1]] : [x && x.s, x && x.d]; }
 function _logFor(it, store, start, today){
+  const r=_logForPairs(it, store, start, today);
+  return {a:r.a, seg:r.seg.map(function(x){ return {s:x[0], d:x[1]}; })};
+}
+function _logForPairs(it, store, start, today){
   const L=it.storeLog;
   if(!L || L.a!==start || !Array.isArray(L.seg) || !L.seg.length) return {a:start, seg:[[store, start]]};
-  const seg=L.seg.map(function(x){ return x.slice(); }), last=seg[seg.length-1];
+  const seg=L.seg.map(_segIn), last=seg[seg.length-1];
   if(last[0]===store) return {a:start, seg:seg};
   if(last[1]>=today){                                   // moved again the same day: replace, don't add
     seg.pop();
@@ -2144,7 +2150,7 @@ function freshStatus(item){
     if(sl){
       const life=function(st){ let d=sl[st]??sl.pantry; if(d>0 && item.vac) d=d*vacMult(st); if(d>0 && item.ripe) d=d*ripeMult(item.ripe); return d>0?d:0; };
       const cur=item.store||"pantry";
-      const L=(item.storeLog && item.storeLog.a===_start && item.storeLog.seg && item.storeLog.seg.length) ? item.storeLog.seg : [[cur,_start]];
+      const L=(item.storeLog && item.storeLog.a===_start && item.storeLog.seg && item.storeLog.seg.length) ? item.storeLog.seg.map(_segIn) : [[cur,_start]];
       let used=0;                                                    // share of its life already used in earlier places
       for(let i=0;i<L.length-1;i++){ const days=Math.max(0,daysBetween(L[i][1],L[i+1][1])); const lf=life(L[i][0]); used+= lf>0 ? days/lf : (days>0?1:0); }
       const lc=life(cur);
@@ -5230,7 +5236,7 @@ if(window.CLOUD){
   });
 
   /* ---------- helpers ---------- */
-  function clean(o){ try{ const c=JSON.parse(JSON.stringify(o||{})); if(Array.isArray(c.items)) c.items.forEach(it=>{ if(typeof it.photo==="string" && it.photo.startsWith("data:")) it.photo="L"; }); return c; }catch(e){ return {}; } }
+  function clean(o){ try{ const c=JSON.parse(JSON.stringify(o||{})); if(Array.isArray(c.items)) c.items.forEach(it=>{ if(typeof it.photo==="string" && it.photo.startsWith("data:")) it.photo="L"; if(it.storeLog && Array.isArray(it.storeLog.seg)) it.storeLog.seg=it.storeLog.seg.map(function(x){ return Array.isArray(x)?{s:x[0],d:x[1]}:x; }); }); return c; }catch(e){ return {}; } }
   function esc(s){ return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function toast(m,k){ if(window.__toast) window.__toast(m,k); }
  }catch(err){
