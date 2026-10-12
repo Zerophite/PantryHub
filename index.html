@@ -628,7 +628,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 107 · 2026-10-12</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 108 · 2026-10-12</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -4501,6 +4501,30 @@ function reportShelfNotes(){
     window.ShelfNotes.add(id, {name:String(it.name).slice(0,120), cat:String(it.category||"").slice(0,60), status:note.status, basis:note.basis, from:note.from, to:note.to})
       .then(function(ok){ if(!ok) return; sent[memo]=1; try{ localStorage.setItem("pantry_shelfnotes_sent", JSON.stringify(sent)); }catch(e){} });
   });
+  reportShelfProducts(sent, ph);
+}
+// Product list for the admin's shelf-life audit: one note per product per pantry (only product name, category,
+// the app's shelf-life days, where it's kept and whether it's opened — no dates, amounts or pantry names).
+async function reportShelfProducts(sent, ph){
+  if(typeof canEdit==="function" && !canEdit()) return;
+  const seen={}, jobs=[];
+  (state.items||[]).forEach(function(it){
+    if(it.location!=="pantry") return;
+    const k=_shelfKey(it.name); if(!k || seen[k]) return; seen[k]=1;
+    const sl=shelfLife(it.name,it.category);
+    const from=sl?{p:sl.pantry||0,f:sl.fridge||0,z:sl.freezer||0}:{p:0,f:0,z:0};
+    const to={s:it.store||"pantry", o:it.opened?1:0};
+    const basis=sl?String(sl._basis||""):"none";
+    const id="s-"+(k.replace(/[^a-z0-9]+/g,"-").slice(0,80)||"item")+"_"+ph, memo=id+":"+basis+":"+JSON.stringify(from)+JSON.stringify(to)+":"+it.category;
+    if(sent[memo]) return;
+    jobs.push({id:id, memo:memo, data:{name:String(it.name).slice(0,120), cat:String(it.category||"").slice(0,60), status:"seen", basis:basis.slice(0,60), from:from, to:to}});
+  });
+  for(let i=0;i<jobs.length;i++){                     // gently, one at a time
+    const j=jobs[i]; const ok=await window.ShelfNotes.add(j.id, j.data);
+    if(!ok) break;                                    // no permission yet (rule not published) — try again next time
+    sent[j.memo]=1;
+    if(i%20===19 || i===jobs.length-1){ try{ localStorage.setItem("pantry_shelfnotes_sent", JSON.stringify(sent)); }catch(e){} }
+  }
 }
 setTimeout(function(){ try{ reportShelfNotes(); }catch(e){} }, 30000);
 function _fmtShelfChange(a,b){
@@ -4526,7 +4550,8 @@ async function renderSharedShelfNotes(box){
     return;
   }
   const groups={};
-  (r.items||[]).forEach(function(n){ const k=normName(n.name||""); if(!k) return; const g=groups[k]||(groups[k]={name:n.name, cat:n.cat, status:n.status, from:n.from, to:n.to, basis:n.basis, pantries:{}}); g.pantries[(n.id||"").split("_").pop()]=1; if(n.status==="corrected"){ g.status="corrected"; g.from=n.from; g.to=n.to; g.basis=n.basis; } });
+  const all=r.items||[], prod=all.filter(function(n){ return n.status==="seen"; });
+  all.filter(function(n){ return n.status!=="seen"; }).forEach(function(n){ const k=normName(n.name||""); if(!k) return; const g=groups[k]||(groups[k]={name:n.name, cat:n.cat, status:n.status, from:n.from, to:n.to, basis:n.basis, pantries:{}}); g.pantries[(n.id||"").split("_").pop()]=1; if(n.status==="corrected"){ g.status="corrected"; g.from=n.from; g.to=n.to; g.basis=n.basis; } });
   const list=Object.keys(groups).map(function(k){ return groups[k]; });
   const fixed=list.filter(function(g){ return g.status==="corrected"; }), nod=list.filter(function(g){ return g.status!=="corrected"; });
   const cnt=function(g){ const c=Object.keys(g.pantries).length; return c+" pantr"+(c===1?"y":"ies"); };
@@ -4537,7 +4562,17 @@ async function renderSharedShelfNotes(box){
   if(fixed.length){ h+='<div class="sub-hint" style="margin:6px 0 4px"><b>✅ Corrected automatically</b></div>'; fixed.forEach(function(g){ const t=g.name+" ["+g.cat+"]: "+_fmtShelfChange(g.from,g.to)+" (matched “"+g.basis+"”, "+cnt(g)+")"; lines.push("Corrected: "+t); h+=li(t); }); }
   if(nod.length){ h+='<div class="sub-hint" style="margin:8px 0 4px"><b>⚠️ No reliable data (using a category estimate)</b></div>'; nod.forEach(function(g){ const t=g.name+" ["+g.cat+"] ("+cnt(g)+")"; lines.push("No data: "+t); h+=li(t); }); }
   if(list.length) h+='<button class="btn sec" id="btnCopyShelfList" style="margin-top:8px">Copy list</button>';
+  { const pans={}; prod.forEach(function(n){ pans[(n.id||"").split("_").pop()]=1; });
+    const names={}; prod.forEach(function(n){ names[normName(n.name||"")]=1; });
+    h+='<div style="font-weight:800;margin:14px 0 4px">Audit all pantries</div><div class="sub-hint">'+Object.keys(names).length+' products from '+Object.keys(pans).length+' pantr'+(Object.keys(pans).length===1?'y':'ies')+'. Copy the export and send it for a shelf-life review.</div>'
+      +'<button class="btn sec" id="btnCopyShelfAudit" style="margin-top:8px"'+(prod.length?'':' disabled')+'>Copy audit export</button>'; }
   host.innerHTML=h;
+  const ca=$("#btnCopyShelfAudit"); if(ca) ca.addEventListener("click",function(){
+    const rows=prod.map(function(n){ const f=n.from||{}, t=n.to||{}; return [n.name, n.cat, n.basis, f.p, f.f, f.z, t.s, t.o?"opened":"sealed", (n.id||"").split("_").pop()].join(" | "); });
+    rows.sort(function(a,b){ return a.localeCompare(b); });
+    const txt="PantryHub audit export ("+rows.length+" rows)\nname | category | matched | pantry days | fridge days | freezer days | kept in | state | pantry\n"+rows.join("\n");
+    try{ navigator.clipboard.writeText(txt).then(function(){ toast("Audit export copied ("+rows.length+" rows).","good"); }); }catch(e){ toast("Copy failed.","warn"); }
+  });
   const cl=$("#btnCopyShelfList"); if(cl) cl.addEventListener("click",function(){ try{ navigator.clipboard.writeText("PantryHub shelf-life report\n"+lines.join("\n")).then(function(){ toast("List copied.","good"); }); }catch(e){ toast("Copy failed.","warn"); } });
 }
 // ----- Admin: shelf-life check (the same audit, inside the app) -----
