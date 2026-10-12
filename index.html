@@ -557,7 +557,7 @@ body.viewonly .vobadge{display:block}
       <textarea id="fNote" placeholder="Any details…"></textarea>
     </div>
 
-    <button class="btn" id="btnSaveItem">Save Item</button>
+    <button class="btn" id="btnSaveItem">Save</button>
     <button class="btn" id="btnSaveNext" style="margin-top:8px">✓ Save &amp; scan next item</button>
     <div class="btnrow" id="editExtraBtns" style="display:none">
       <button class="btn sec" id="btnMoveItem">Move to Grocery</button>
@@ -628,7 +628,7 @@ body.viewonly .vobadge{display:block}
   <div class="sheet" id="settingsSheet">
     <div class="grab"></div>
     <h2>⚙️ Settings</h2>
-    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 103 · 2026-10-11</div>
+    <div class="sub-hint" id="buildStamp" style="margin:-8px 0 12px;font-weight:700;color:var(--green)">Build 107 · 2026-10-12</div>
 
     <div class="setblock" id="cloudSettings" style="display:none">
       <div class="setlabel">Pantry &amp; sharing</div>
@@ -937,6 +937,7 @@ function rebuildCats(){
   syncCatsFromItems();  // categories then grow automatically from whatever items the user adds
   CAT_ORDER=state.cats.map(c=>c.name);
   CAT_ICON=Object.fromEntries(state.cats.map(c=>[c.name,c.icon]));
+  try{ syncStoreLogs(); }catch(e){}   // on load / when another device's changes arrive
 }
 /* ---------- Learned category preferences (per user, replaces hardcoded auto-detect) ---------- */
 function learnCat(name, cat){
@@ -1771,7 +1772,10 @@ const FRESH=[
   // --- Spices / seasonings (ground lose potency ~1yr; whole longer) ---
   [["cube","bouillon","stock cube"],{fridge:0,freezer:0,pantry:365}],
   [["powder","ground","seasoning","paprika","cayenne","cumin","curry","chili","turmeric","cinnamon","basil","oregano","thyme","sage","bay leaf","coriander","tarragon","savoury","kelp","dried"],{fridge:365,freezer:365,pantry:365}],
-  [["whole","seed","clove","anise","cardamon","cardamom","peppercorn","fennel","stick"],{fridge:730,freezer:730,pantry:730}],
+  [["whole clove","whole spice","whole allspice","whole nutmeg","seed","clove","anise","cardamon","cardamom","peppercorn","fennel","cinnamon stick"],{fridge:730,freezer:730,pantry:730}],
+  [["grain bread","grains bread","wheat bread","multigrain bread","rye bread","sourdough","sandwich bread","sliced bread"],{fridge:14,freezer:90,pantry:5}],   // bread, however it's named
+  [["fish stick","fish finger"],{fridge:2,freezer:180,pantry:0}],
+  [["lechon sauce","mang tomas","liver sauce"],{fridge:60,freezer:0,pantry:3}],   // liver-based sauce: refrigerate once opened
   // --- Grains / pasta / noodles (after opening) ---
   [["fresh noodle","fresh udon","udon"],{fridge:7,freezer:120,pantry:180}],
   [["corn tortilla","flour tortilla","wheat tortilla","tortilla"],{fridge:21,freezer:180,pantry:7}],
@@ -1821,6 +1825,24 @@ const _PERISH_EXTRA=/(bread|bun|bagel|baguette|brioche|roll|pita|tortilla|naan|m
 const _BAKED_KW=/^(bread|loaf|bun|bagel|baguette|brioche|roll|pita|naan|flatbread|tortilla|muffin|croissant)$/;
 const _DRY_CAT=/Snack|Baking|Grain|Pasta|Noodle|Beverage|Supplement|Spice|Season|Dried/i;
 function prettyKw(k){ k=(k||"").replace(/berr$/,"berry"); return k.charAt(0).toUpperCase()+k.slice(1); }
+// Does this shelf life look wrong? "long" = far longer than normal for this kind of food once opened;
+// "word" = the matched word isn't what the product is (it sits early in a longer name, like "Whole" in "Whole Grains 12 Grain Bread").
+const _PERISH_CATS=/^(Proteins|Dairy & Refrigerated|Fruits & Vegetables|Protein|Dairy\/Non-Dairy|Fruit\/Veggies)$/;
+const _BREADLIKE=/\b(bread|breads|bun|buns|bagel|bagels|muffin|muffins|pita|pitas|tortilla|tortillas|loaf|loaves|naan|paratha|croissant|croissants|brioche)\b/;
+const _TAILWORD=/^(\d.*|g|kg|ml|l|oz|lb|lbs|pack|pk|ct|original|frozen|organic|unsalted|salted|plain|classic|regular|light|large|small|medium|fresh|natural|pure|extra|virgin|biologique|bio|style|type|flavor|flavour|flavored|flavoured|r|m|f|mf|sauce)$/;
+function _shelfSuspect(name, cat, r, kw){
+  if(!r || !kw) return "";
+  const nn=normName(name);
+  let lim=null;
+  if(_BREADLIKE.test(nn)) lim={pantry:14, fridge:30};
+  else if(_PERISH_CATS.test(cat||"") && CAT_SHELF[cat]) lim={pantry:Math.max(4,CAT_SHELF[cat].pantry*4), fridge:Math.max(14,CAT_SHELF[cat].fridge*4)};
+  if(lim && ((r.pantry||0)>lim.pantry || (r.fridge||0)>lim.fridge)) return "long";
+  const w=nn.split(" ").filter(Boolean); while(w.length>1 && _TAILWORD.test(w[w.length-1])) w.pop();
+  const k=normName(kw).split(" "), last=k[k.length-1];
+  let idx=-1; for(let i=0;i<w.length;i++){ if(w[i]===last || w[i].indexOf(last)===0) idx=i; }
+  if(idx>=0 && idx < w.length-3) return "word";
+  return "";
+}
 function shelfLife(name,cat){
   const n=(name||"").toLowerCase();
   const packaged = _NOT_FRESH.test(n) || (cat && _PACKAGED_CAT.test(cat));
@@ -1833,7 +1855,22 @@ function shelfLife(name,cat){
       if(kw.length>bestLen){ bestLen=kw.length; best={d, kw}; }                // most-specific keyword wins
     }
   }
-  if(best) return Object.assign({_basis:prettyKw(best.kw)}, best.d);
+  if(best){
+    const r=Object.assign({_basis:prettyKw(best.kw), _kw:best.kw}, best.d);
+    const why=_shelfSuspect(name,cat,r,best.kw);
+    if(why){
+      r._suspect=why;
+      const rs=(typeof researchedShelf==="function")?researchedShelf(name):null;
+      if(rs){
+        r._checked=true;
+        const was={p:r.pantry,f:r.fridge,z:r.freezer}; let changed=false;
+        const use=function(key,ai){ if(ai>0 && r[key]>0 && ai<r[key]*0.5){ r[key]=ai; changed=true; } };
+        use("pantry",rs.p); use("fridge",rs.f); use("freezer",rs.z);
+        if(changed){ r._basis="checked"; r._was=was; }
+      }
+    }
+    return r;
+  }
   { const rs=(typeof researchedShelf==="function")?researchedShelf(name):null; if(rs) return {_basis:"researched", fridge:rs.f, freezer:rs.z, pantry:rs.p}; }
   if(cat && CAT_SHELF[cat]) return Object.assign({_basis:"cat:"+cat}, CAT_SHELF[cat]);
   return null;
@@ -1904,6 +1941,7 @@ function seedGroceryV1(){
   save();
 }
 function save(){
+  try{ syncStoreLogs(); }catch(e){}
   try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){ toast("Storage full — remove some photos","bad"); }
   if(CLOUD && window.Sync && window.Sync.ready) window.Sync.push(state);   // debounced upload to Firestore
 }
@@ -2052,6 +2090,28 @@ function seed(){
 
 /* ---------- Freshness computation ---------- */
 function daysBetween(a,b){ return Math.round((new Date(b)-new Date(a))/86400000); }
+// Storage history of an opened item: {a: day the countdown started, seg: [[place, from-day], ...]}.
+// Each place uses up its share of the item's life; moves on the same day don't count (misclicks are free).
+function _logFor(it, store, start, today){
+  const L=it.storeLog;
+  if(!L || L.a!==start || !Array.isArray(L.seg) || !L.seg.length) return {a:start, seg:[[store, start]]};
+  const seg=L.seg.map(function(x){ return x.slice(); }), last=seg[seg.length-1];
+  if(last[0]===store) return {a:start, seg:seg};
+  if(last[1]>=today){                                   // moved again the same day: replace, don't add
+    seg.pop();
+    if(seg.length && seg[seg.length-1][0]===store) return {a:start, seg:seg};   // moved straight back = as if never moved
+    seg.push([store, seg.length?today:start]); return {a:start, seg:seg};
+  }
+  seg.push([store, today]); return {a:start, seg:seg};
+}
+function syncStoreLogs(){
+  const today=todayISO();
+  (state.items||[]).forEach(function(it){
+    const start = it.location==="pantry" ? (it.opened || (agesFromPurchase(it) ? itemAddedISO(it) : null)) : null;
+    if(!start){ if(it.storeLog) delete it.storeLog; return; }
+    it.storeLog=_logFor(it, it.store||"pantry", start, today);
+  });
+}
 // Vacuum sealing slows spoilage/oxidation & prevents freezer burn — research-backed rough multipliers.
 function vacMult(store){ return store==="freezer"?2.5 : store==="fridge"?2 : 1.5; }
 // Green / unripe fruit keeps much longer (it ripens first); very-ripe fruit spoils sooner.
@@ -2082,14 +2142,18 @@ function freshStatus(item){
   if(_start){
     const sl=shelfLife(item.name,item.category);
     if(sl){
-      let d=sl[item.store]??sl.pantry;
-      if(d>0 && item.vac) d=Math.round(d*vacMult(item.store));
-      if(d>0 && item.ripe) d=Math.round(d*ripeMult(item.ripe));
-      if(d>0){ const dt=new Date(_start); dt.setDate(dt.getDate()+d); useBy=dt.toISOString().slice(0,10); source=item.opened?"opened":"bought"; }
+      const life=function(st){ let d=sl[st]??sl.pantry; if(d>0 && item.vac) d=d*vacMult(st); if(d>0 && item.ripe) d=d*ripeMult(item.ripe); return d>0?d:0; };
+      const cur=item.store||"pantry";
+      const L=(item.storeLog && item.storeLog.a===_start && item.storeLog.seg && item.storeLog.seg.length) ? item.storeLog.seg : [[cur,_start]];
+      let used=0;                                                    // share of its life already used in earlier places
+      for(let i=0;i<L.length-1;i++){ const days=Math.max(0,daysBetween(L[i][1],L[i+1][1])); const lf=life(L[i][0]); used+= lf>0 ? days/lf : (days>0?1:0); }
+      const lc=life(cur);
+      if(lc>0){ const dt=new Date(L[L.length-1][1]); dt.setDate(dt.getDate()+Math.round(Math.max(0,1-used)*lc)); useBy=dt.toISOString().slice(0,10); source=item.opened?"opened":"bought"; }
     }
   }
   if(item.exp){ if(!useBy || item.exp<useBy){ useBy=item.exp; source="exp"; } }
-  if(item.store==="freezer"){
+  const _moved=!!(item.storeLog && item.storeLog.seg && item.storeLog.seg.length>1);   // has been kept somewhere else first
+  if(item.store==="freezer" && !_moved){
     const _slf=shelfLife(item.name,item.category);
     if(_slf && _slf.freezer>0){
       const _fz=new Date(itemAddedISO(item)); _fz.setDate(_fz.getDate()+_slf.freezer);
@@ -2456,24 +2520,28 @@ $("#openStores").addEventListener("click",function(e){
 });
 $("#btnOpenCancel").addEventListener("click",closeOpenSheet);
 $("#openScrim").addEventListener("click",function(e){ if(e.target===$("#openScrim")) closeOpenSheet(); });
+function _storeSnap(it){ return {opened:it.opened||null, store:it.store||"pantry", vac:!!it.vac, storeLog:it.storeLog?JSON.parse(JSON.stringify(it.storeLog)):null}; }
+function _storeRestore(id, prev){ const it=getItem(id); if(!it) return; it.opened=prev.opened; it.store=prev.store; it.vac=prev.vac; if(prev.storeLog) it.storeLog=prev.storeLog; else delete it.storeLog; save(); renderAll(); toast("Undone","good"); }
 function finishMove(id, store, vac){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
   const same=(it.store||"pantry")===store && !!it.vac===!!vac;
-  it.store=store; it.vac=!!vac;
   if(same) return;
+  const prev=_storeSnap(it);
+  it.store=store; it.vac=!!vac;
   save(); renderAll();
   const _where={pantry:"🧺 Pantry",fridge:"❄️ Fridge",freezer:"🧊 Freezer"}[store]||store;
-  toast("Moved to "+_where+(it.vac?" · vacuum sealed":""),"good");
+  toastUndo("Moved to "+_where+(it.vac?" · vacuum sealed":""),"good",function(){ _storeRestore(id, prev); });
 }
 function finishOpened(id, store, vac){
   if(!requireEdit()) return;
   const it=getItem(id); if(!it) return;
+  const prev=_storeSnap(it);
   it.opened=todayISO(); it.store=store; it.vac=!!vac;
   save(); renderAll();
   const fs=freshStatus(it);
   const _where={pantry:"Pantry",fridge:"Fridge",freezer:"Freezer"}[it.store]||it.store;
-  toast("🫙 Opened · "+_where+(it.vac?" · vacuum sealed":"")+(fs?" · best within "+fs.daysLeft+" day(s)":""),"good");
+  toastUndo("🫙 Opened · "+_where+(it.vac?" · vacuum sealed":"")+(fs?" · best within "+fs.daysLeft+" day(s)":""),"good",function(){ _storeRestore(id, prev); });
 }
 function markUnopened(id){
   if(!requireEdit()) return;
@@ -2732,13 +2800,16 @@ function updateFreshInfo(){
     else recLine=`🏷️ Best kept in the <b>${cap}</b>${opened?" now it's open":""}.`;
   }
   let basisLine="";
-  if(sl && sl._basis){ basisLine = sl._basis==="researched" ? "ⓘ Shelf life researched for this product." : /^cat:/.test(sl._basis) ? `ⓘ Estimate from the <b>${sl._basis.slice(4)}</b> category — set a date if you have one.` : `ⓘ Reading this as <b>${sl._basis}</b>. Not right? Just set the date yourself.`; }
+  if(sl && sl._basis){ basisLine = sl._basis==="researched" ? "ⓘ Shelf life researched for this product." : sl._basis==="checked" ? "ⓘ Shelf life double-checked and corrected for this product." : /^cat:/.test(sl._basis) ? `ⓘ Estimate from the <b>${sl._basis.slice(4)}</b> category — set a date if you have one.` : `ⓘ Reading this as <b>${sl._basis}</b>. Not right? Just set the date yourself.`; }
   let html="";
   if(opened && sl){
     let d=sl[storeVal]??sl.pantry;
     if(d>0 && vac) d=Math.round(d*vacMult(storeVal));
     if(d>0){
       const dt=new Date(opened); dt.setDate(dt.getDate()+d);
+      const _ed=editingId?getItem(editingId):null;
+      if(_ed && _ed.location==="pantry"){ const proj=_logFor(_ed, storeVal, opened, todayISO());
+        if(proj.seg.length>1){ const fx=freshStatus(Object.assign({},_ed,{store:storeVal,opened:opened,vac:vac,exp:null,storeLog:proj})); if(fx && fx.useBy){ dt.setTime(new Date(fx.useBy).getTime()); d=Math.max(0,daysBetween(todayISO(),fx.useBy)); } } }
       html+=`Once opened${vac?" & vacuum-sealed":""}, keep in the <b>${storeVal}</b> for about <b>${d} days</b> → best used by <b>${dt.toISOString().slice(0,10)}</b>.`;
     }else{
       html+=`Best stored elsewhere once opened — the ${storeVal} isn't ideal for this item.`;
@@ -4211,20 +4282,20 @@ function speak(text){ try{ const u=new SpeechSynthesisUtterance(text); u.rate=1;
    TOAST
    ============================================================ */
 let toastTimer=null;
-function toast(msg,kind){
+function toast(msg,kind,ms){
   const host=$("#toast");
   const el=document.createElement("div");
   el.className="toast "+(kind||"");
   el.innerHTML=msg;
   host.appendChild(el);
   requestAnimationFrame(()=>el.classList.add("show"));
-  setTimeout(()=>{ el.classList.remove("show"); setTimeout(()=>el.remove(),300); }, 3200);
+  setTimeout(()=>{ el.classList.remove("show"); setTimeout(()=>el.remove(),300); }, ms||3200);
 }
 window.__toast=toast;
 document.addEventListener("click",e=>{ if(e.target.closest && e.target.closest("#btnGrocScan")){ grocLoop=true; scanTarget="grocery"; openCamera("barcode"); } });
 // A toast with a real Undo button (the toast layer itself is click-through; only the button catches taps).
 function toastUndo(msg,kind,undoFn){
-  toast(msg+' <button class="tundo" type="button">Undo</button>',kind);
+  toast(msg+' <button class="tundo" type="button">Undo</button>',kind,6000);
   const host=$("#toast"), el=host&&host.lastElementChild;
   const btn=el&&el.querySelector(".tundo");
   if(btn){ btn.addEventListener("click",(e)=>{ e.preventDefault(); e.stopPropagation(); if(undoFn) undoFn(); if(el){ el.classList.remove("show"); setTimeout(()=>el.remove(),250); } }); }
@@ -4372,11 +4443,13 @@ function shelfCandidates(){
   const now=Date.now(), seen={}, out=[];
   (state.items||[]).forEach(function(it){
     if(it.location!=="pantry") return;
-    const sl=shelfLife(it.name,it.category); if(!sl || !/^cat:/.test(sl._basis||"")) return;   // only items the app is estimating
+    const sl=shelfLife(it.name,it.category); if(!sl) return;
+    const est=/^cat:/.test(sl._basis||""), chk=!!sl._suspect && !sl._checked;               // estimates, and suspicious matches
+    if(!est && !chk) return;
     const k=_shelfKey(it.name); if(!k || seen[k]) return; seen[k]=1;
     const prev=state.shelfAI && state.shelfAI[k];
     if(prev && prev.none && now-(prev.ts||0) < 7*86400000) return;                           // found nothing recently; retry weekly
-    out.push({k:k, name:it.name, cat:it.category, opened:!!it.opened});
+    out.push({k:k, name:it.name, cat:it.category, opened:!!it.opened, chk:chk});
   });
   out.sort(function(a,b){ return (b.opened?1:0)-(a.opened?1:0); });                            // opened items first
   return out;
@@ -4400,23 +4473,83 @@ async function researchShelfLives(force){
     const now=Date.now(); let done=0;
     batch.forEach(function(b,idx){
       const x=(j.results||[]).find(function(q){ return +q.i===idx+1; });
-      const v=x ? _safeShelf(x, b.cat) : null;
+      const v=x ? _safeShelf(x, b.chk ? "" : b.cat) : null;   // a double-check is compared with the app's own value, so no category cap
       state.shelfAI[b.k] = v ? {p:v.p, f:v.f, z:v.z, ts:now} : {none:true, ts:now};
       if(v) done++;
     });
     save(); renderAll();
+    try{ reportShelfNotes(); }catch(e){}
     return {done:done, reason:"ok", more:todo.length>batch.length};
   }catch(e){ return {done:0, reason:"error"}; }
   finally{ _shelfBusy=false; }
+}
+// ----- Shared shelf-life notes: each device reports corrections & "no data" items (name, category, days only) -----
+function _hash8(s){ let h=5381; for(let i=0;i<s.length;i++){ h=((h<<5)+h+s.charCodeAt(i))|0; } return (h>>>0).toString(36); }
+function reportShelfNotes(){
+  if(!window.ShelfNotes || !CLOUD) return;
+  let sent={}; try{ sent=JSON.parse(localStorage.getItem("pantry_shelfnotes_sent")||"{}"); }catch(e){}
+  const ph=_hash8(String(window.CURRENT_PANTRY||"local"));
+  (state.items||[]).forEach(function(it){
+    if(it.location!=="pantry") return;
+    const sl=shelfLife(it.name,it.category); if(!sl) return;
+    const k=_shelfKey(it.name); let note=null;
+    if(sl._basis==="checked" && sl._was) note={status:"corrected", basis:prettyKw(sl._kw||""), from:sl._was, to:{p:sl.pantry,f:sl.fridge,z:sl.freezer}};
+    else if(/^cat:/.test(sl._basis||"") && state.shelfAI && state.shelfAI[k] && state.shelfAI[k].none) note={status:"nodata", basis:"category estimate", from:{p:sl.pantry,f:sl.fridge,z:sl.freezer}, to:null};
+    if(!note) return;
+    const id=(k.replace(/[^a-z0-9]+/g,"-").slice(0,80)||"item")+"_"+ph, memo=id+":"+note.status+":"+JSON.stringify(note.to);
+    if(sent[memo]) return;
+    window.ShelfNotes.add(id, {name:String(it.name).slice(0,120), cat:String(it.category||"").slice(0,60), status:note.status, basis:note.basis, from:note.from, to:note.to})
+      .then(function(ok){ if(!ok) return; sent[memo]=1; try{ localStorage.setItem("pantry_shelfnotes_sent", JSON.stringify(sent)); }catch(e){} });
+  });
+}
+setTimeout(function(){ try{ reportShelfNotes(); }catch(e){} }, 30000);
+function _fmtShelfChange(a,b){
+  const parts=[]; [["f","fridge"],["p","pantry"],["z","freezer"]].forEach(function(x){ if(a && b && a[x[0]]!==b[x[0]]) parts.push(x[1]+" "+a[x[0]]+" → "+b[x[0]]+" days"); });
+  return parts.join(", ");
+}
+function _shelfRulesText(){
+  return "match /shelfnotes/{id} {\n  allow create, update: if request.auth != null\n    && request.resource.data.keys().hasOnly(['name','cat','status','basis','from','to','ts']);\n  allow read, delete: if request.auth != null && request.auth.uid == \""+(window.MY_UID||"YOUR_ID")+"\";\n}";
+}
+async function renderSharedShelfNotes(box){
+  const host=document.createElement("div"); box.appendChild(host);
+  const head='<div style="font-weight:800;margin:14px 0 4px">All pantries</div>';
+  if(!window.ShelfNotes){ host.innerHTML=head+'<div class="sub-hint">Available when the pantry is synced to the cloud.</div>'; return; }
+  host.innerHTML=head+'<div class="sub-hint">Loading…</div>';
+  const r=await window.ShelfNotes.list();
+  if(r.error){
+    if(/permission/i.test(r.error)){
+      host.innerHTML=head+'<div class="sub-hint">One-time setup: in the Firebase console, open <b>Firestore → Rules</b>, paste this inside <code>match /databases/{database}/documents { … }</code>, then tap <b>Publish</b>.</div>'
+        +'<pre style="white-space:pre-wrap;font-size:12px;background:#f4f6f2;padding:8px;border-radius:8px;margin:6px 0">'+escapeHtml(_shelfRulesText())+'</pre>'
+        +'<button class="btn sec" id="btnCopyShelfRules">Copy rule</button>';
+      const cb=$("#btnCopyShelfRules"); if(cb) cb.addEventListener("click",function(){ try{ navigator.clipboard.writeText(_shelfRulesText()).then(function(){ toast("Rule copied.","good"); }); }catch(e){ toast("Copy failed. Select the text instead.","warn"); } });
+    } else host.innerHTML=head+'<div class="sub-hint">Couldn\'t load the shared list ('+escapeHtml(r.error)+').</div>';
+    return;
+  }
+  const groups={};
+  (r.items||[]).forEach(function(n){ const k=normName(n.name||""); if(!k) return; const g=groups[k]||(groups[k]={name:n.name, cat:n.cat, status:n.status, from:n.from, to:n.to, basis:n.basis, pantries:{}}); g.pantries[(n.id||"").split("_").pop()]=1; if(n.status==="corrected"){ g.status="corrected"; g.from=n.from; g.to=n.to; g.basis=n.basis; } });
+  const list=Object.keys(groups).map(function(k){ return groups[k]; });
+  const fixed=list.filter(function(g){ return g.status==="corrected"; }), nod=list.filter(function(g){ return g.status!=="corrected"; });
+  const cnt=function(g){ const c=Object.keys(g.pantries).length; return c+" pantr"+(c===1?"y":"ies"); };
+  const li=function(t){ return '<div style="padding:3px 0;border-bottom:1px solid var(--line,#eee)">'+escapeHtml(t)+'</div>'; };
+  const lines=[];
+  let h=head;
+  if(!list.length) h+='<div class="sub-hint">No corrections or missing data reported yet.</div>';
+  if(fixed.length){ h+='<div class="sub-hint" style="margin:6px 0 4px"><b>✅ Corrected automatically</b></div>'; fixed.forEach(function(g){ const t=g.name+" ["+g.cat+"]: "+_fmtShelfChange(g.from,g.to)+" (matched “"+g.basis+"”, "+cnt(g)+")"; lines.push("Corrected: "+t); h+=li(t); }); }
+  if(nod.length){ h+='<div class="sub-hint" style="margin:8px 0 4px"><b>⚠️ No reliable data (using a category estimate)</b></div>'; nod.forEach(function(g){ const t=g.name+" ["+g.cat+"] ("+cnt(g)+")"; lines.push("No data: "+t); h+=li(t); }); }
+  if(list.length) h+='<button class="btn sec" id="btnCopyShelfList" style="margin-top:8px">Copy list</button>';
+  host.innerHTML=h;
+  const cl=$("#btnCopyShelfList"); if(cl) cl.addEventListener("click",function(){ try{ navigator.clipboard.writeText("PantryHub shelf-life report\n"+lines.join("\n")).then(function(){ toast("List copied.","good"); }); }catch(e){ toast("Copy failed.","warn"); } });
 }
 // ----- Admin: shelf-life check (the same audit, inside the app) -----
 function renderShelfReport(){
   const box=$("#shelfReport"); if(!box) return;
   const items=(state.items||[]).filter(function(i){ return i.location==="pantry"; });
-  let spec=0, res=0; const est=[], cats=[], past=[];
+  let spec=0, res=0; const est=[], cats=[], past=[], fixed=[], waiting=[];
   items.forEach(function(it){
     const sl=shelfLife(it.name,it.category);
     if(!sl || /^cat:/.test(sl._basis||"")) est.push(it); else if(sl._basis==="researched") res++; else spec++;
+    if(sl && sl._basis==="checked") fixed.push(it.name+": "+_fmtShelfChange(sl._was,{p:sl.pantry,f:sl.fridge,z:sl.freezer}));
+    else if(sl && sl._suspect && !sl._checked) waiting.push(it.name+" (matched “"+sl._basis+"”)");
     if(/Fruit|Veg/i.test(it.category||"")){ const rule=autoCategoryStrict(it.name); if(rule && !/Fruit|Veg/i.test(rule)) cats.push(it.name+" → looks like "+rule); }
     if(it.opened){ const f=freshStatus(it); if(f && f.daysLeft<0) past.push(it.name+" ("+(-f.daysLeft)+" day"+(f.daysLeft===-1?"":"s")+" past)"); }
   });
@@ -4427,17 +4560,21 @@ function renderShelfReport(){
     h+='<div class="sub-hint" style="margin:8px 0 4px"><b>Estimated from category</b> (opened first)</div>'+est.map(function(it){ return li((it.opened?"Opened · ":"Sealed · ")+it.name+" ["+it.category+"]"); }).join("");
     h+='<button class="btn sec" id="btnShelfResearch" style="margin-top:8px">Research these now</button>';
   }
+  if(fixed.length) h+='<div class="sub-hint" style="margin:10px 0 4px"><b>✅ Double-checked and corrected</b></div>'+fixed.map(li).join("");
+  if(waiting.length){ h+='<div class="sub-hint" style="margin:10px 0 4px"><b>🔎 Waiting for a double-check</b></div>'+waiting.map(li).join("");
+    if(!est.length) h+='<button class="btn sec" id="btnShelfResearch" style="margin-top:8px">Double-check these now</button>'; }
   if(cats.length) h+='<div class="sub-hint" style="margin:10px 0 4px"><b>Check category</b></div>'+cats.map(li).join("");
   if(past.length) h+='<div class="sub-hint" style="margin:10px 0 4px"><b>Opened and past best-by</b></div>'+past.map(li).join("");
-  if(!est.length && !cats.length && !past.length) h+='<div class="sub-hint">All items have a specific or researched shelf life. No issues found.</div>';
+  if(!est.length && !cats.length && !past.length && !waiting.length) h+='<div class="sub-hint">All items have a specific or researched shelf life. No issues found.</div>';
   box.innerHTML=h; box.style.display="";
+  renderSharedShelfNotes(box);
   const b=$("#btnShelfResearch");
   if(b) b.addEventListener("click", function(){
     b.disabled=true; b.textContent="Researching…";
     researchShelfLives(true).then(function(r){
       const msg = r.reason==="ok" ? ("Researched "+r.done+" item"+(r.done===1?"":"s")+(r.more?". More remain — tap again.":"."))
                 : r.reason==="none" ? "Nothing left to research."
-                : r.reason==="worker" ? "Update the Cloudflare Worker to v6 to enable research."
+                : r.reason==="worker" ? "Update the Cloudflare Worker to enable research."
                 : r.reason==="quota" ? "Daily scan limit reached. Try again tomorrow."
                 : r.reason==="off" ? "Research needs the scanner service." : "Research failed. Try again later.";
       toast(msg, r.reason==="ok"?"good":"warn"); renderShelfReport();
@@ -4793,7 +4930,7 @@ if(window.CLOUD){
   const V="10.12.0";
   const { initializeApp } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-app.js`);
   const { getAuth, onAuthStateChanged, signInAnonymously } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-auth.js`);
-  const { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, collection, getCountFromServer } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
+  const { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, getDoc, setDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, collection, getCountFromServer, getDocs } = await import(`https://www.gstatic.com/firebasejs/${V}/firebase-firestore.js`);
 
   const app=initializeApp(window.FIREBASE_CONFIG);
   const auth=getAuth(app);
@@ -4839,7 +4976,7 @@ if(window.CLOUD){
   /* ---------- Silent anonymous sign-in (no login screen ever) ---------- */
   onAuthStateChanged(auth,async user=>{
     if(!user){ signInAnonymously(auth).catch(e=>{ $("#pantryMsg").className="cloudmsg err"; $("#pantryMsg").textContent=friendly(e); }); return; }
-    uid=user.uid;
+    uid=user.uid; window.MY_UID=uid;
     await restoreHub();
     renderList();
     // Skip the hub on launch: reopen the last pantry straight away (spinner stays up until it loads).
@@ -4970,6 +5107,11 @@ if(window.CLOUD){
     return out;
   };
   // Per-item photos, keyed by item id, so shared viewers see EVERY photo (barcode or not). Free Firestore.
+  // Shared shelf-life notes (any signed-in device can add; only the admin's ID can read — see the rule in Settings)
+  window.ShelfNotes={
+    async add(id,data){ try{ await setDoc(doc(db,"shelfnotes",String(id)), Object.assign({},data,{ts:serverTimestamp()})); return true; }catch(e){ return false; } },
+    async list(){ try{ const qs=await getDocs(collection(db,"shelfnotes")); const out=[]; qs.forEach(function(d){ out.push(Object.assign({id:d.id}, d.data())); }); return {items:out}; }catch(e){ return {error:(e&&e.code)||"error"}; } }
+  };
   window.Photos={
     async get(id){ try{ const snap=await Promise.race([getDoc(doc(db,"itemphotos",String(id))), new Promise(function(r){ setTimeout(function(){ r(null); },8000); })]); return (snap && snap.exists())?(snap.data().data||null):null; }catch(e){ return null; } },
     async save(id,data){ try{ await setDoc(doc(db,"itemphotos",String(id)),{data:data,updatedAt:serverTimestamp()}); return true; }catch(e){ return false; } }
